@@ -1,6 +1,7 @@
 import example1 as e1
 import example2 as e2
 import example3 as e3
+import example4 as e4
 
 
 if __name__ == '__main__':
@@ -16,7 +17,8 @@ if __name__ == '__main__':
     # e3.ex31('SOL-USD')
     # e3.ex32('SOL-USD')
     # e3.ex33('SOL-USD')
-    e3.ex34('SOL-USD')
+    # e3.ex34('SOL-USD')
+    e4.ex41('SOL-USD')
 
 
 

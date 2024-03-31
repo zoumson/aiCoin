@@ -6,7 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeClassifier, plot_tree, DecisionTreeRegressor
 
-from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet, SGDRegressor, SGDOneClassSVM
+# add logistic regression example
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
+from sklearn.linear_model import SGDRegressor, SGDOneClassSVM, LogisticRegression
 from sklearn.svm import SVR
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.gaussian_process import GaussianProcessRegressor
