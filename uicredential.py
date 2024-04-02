@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import TclError, ttk
 
 
-
 def create_input_frame(container, _api_info):
     frame = ttk.Frame(container)
 
@@ -11,12 +10,12 @@ def create_input_frame(container, _api_info):
     frame.columnconfigure(0, weight=3)
 
     ttk.Label(frame, text='API Key').grid(column=0, row=0, sticky=tk.W)
-    key = ttk.Entry(frame, textvariable=_api_info[0], width=30)
+    key = ttk.Entry(frame, textvariable=_api_info[0], width=30, show='*')
     key.focus()
     key.grid(column=1, row=0, sticky=tk.W)
 
     ttk.Label(frame, text='API Secret').grid(column=0, row=1, sticky=tk.W)
-    secret = ttk.Entry(frame, textvariable=_api_info[1], width=30)
+    secret = ttk.Entry(frame, textvariable=_api_info[1], width=30, show='*')
     secret.grid(column=1, row=1, sticky=tk.W)
 
     ttk.Label(frame, text='Email').grid(column=0, row=2, sticky=tk.W)
