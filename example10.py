@@ -4,10 +4,21 @@ import time
 from bitoproClient.bitopro_indicator import indicator
 from bitoproClient.bitopro_restful_client import BitoproRestfulClient, CandlestickResolution, OrderType, StatusKind
 from bitoproClient.bitopro_util import get_current_timestamp
+from sklearn.preprocessing import MinMaxScaler
+
 import uicredential as ui
 # Here we use pandas and matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
+
+import yfinance as yf
+import pandas as pd
+import plotly.graph_objects as go
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+import pickle
 
 
 def set_simple_strategy(_email, _api_secret, _api_key):
@@ -127,13 +138,94 @@ def set_sma_strategy(_email, _api_secret, _api_key):
     # strategy(pair_name_base, pair_name_quote)
 
 
-# if __name__ == '__main__':
-#     strategy('btc', 'usdt')
+def get_hist_yahoo():
+    ticker = 'SOL-USD'
+    # start_dt = '2024-01-01'
+    start_dt = '2020-01-01'
+    end_dt = '2024-04-01'
+
+    # data_frame = yf.download(tickers=ticker, start='2022-03-10', end='2022-03-11', prepost=True, progress=False)
+    data_frame = yf.download(tickers=ticker, start=start_dt, prepost=True, progress=False)
+    # data_frame = yf.download(ticker)
+    data_frame = data_frame.drop(columns='Adj Close')
+    print("Yahoo")
+    print(len(data_frame))
+    print(data_frame)
+    return data_frame
+
+
+def get_hist_bito(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+
+    # Set trading pair to btc_usdt
+    # pair = "btc_usdt"
+    pair = "sol_twd"
+    # '2024-01-01'
+    # dt_string = '2024/01/01 00:00:00'
+    dt_string = '2020/01/01 00:00:00'
+    start_ts = int(
+        datetime.datetime.strptime(dt_string, "%Y/%m/%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc).timestamp())
+
+    end_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+    response = bitopro_client.get_candlestick(pair, CandlestickResolution._1d, start_ts, end_ts)
+    print(response)
+    print(len(response['data']))  # Retrieve the number of candlesticks
+
+    df = pd.DataFrame(response['data'])
+    # print("Bito")
+    # print(len(df))
+    # print(df.head())
+
+    # df_yahoo = get_hist_yahoo()
+    df["Datetime"] = pd.to_datetime(df["timestamp"], unit="ms")
+    df.set_index("Datetime", inplace=True)
+    df.columns = ['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume']
+    df[['Open', 'High', 'Low', 'Close', 'Volume']] = df[['Open', 'High', 'Low', 'Close', 'Volume']].astype(float)
+    return df
+    # print(df[['Close']])
+    # data2 = pd.DataFrame()
+    # data2['Close1'] = df[['Close']]
+    # data2['Close2'] = df_yahoo[['Close']]
+    # data1 = df_yahoo[['Close']]
+    # print(np.shape(df[['Close']]))
+    # print(np.shape(data2))
+    # dff = pd.DataFrame(data1, data2)
+    # print(df.dtypes)
+    # print(df.tail())
+    #
+    # # Plotting the closing price trend
+    # df[['Close']].plot(figsize=(15, 8))
+    # df[['Close']].plot(figsize=(15, 8))
+    # df_yahoo[['Close']].plot(figsize=(15, 8))
+
+    # dff = pd.DataFrame(df[['Close']], df_yahoo[['Close']])
+    # scaler = MinMaxScaler()
+    # scaler = scaler.fit(data2)
+    # data2 = scaler.transform(data2)
+    # data2 = pd.DataFrame(data2)
+    # data2.plot()
+    # plt.show()
+
+
+def get_hist(_email, _api_secret, _api_key):
+    df_bito = get_hist_bito(_email, _api_secret, _api_key)
+    df_yahoo = get_hist_yahoo()
+
+    data = pd.DataFrame()
+    data['Close1'] = df_bito[['Close']]
+    data['Close2'] = df_yahoo[['Close']]
+    scaler = MinMaxScaler()
+    scaler = scaler.fit(data)
+    data = scaler.transform(data)
+    data = pd.DataFrame(data)
+    data.plot()
+    plt.show()
 
 
 def main():
     # ui.load_data(set_single_buy)
-    ui.load_data(set_simple_strategy)
+    ui.load_data(get_hist)
 
 
 if __name__ == "__main__":
