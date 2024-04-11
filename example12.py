@@ -34,212 +34,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
 
 
-def modelNN1(dataframe):
-    # Stacked LSTM for international airline passengers problem with memory
-    # convert an array of values into a dataset matrix
-    def create_dataset(data_in, past_data=1):
-        data_x, data_y = [], []
-        # data_x = (len(data_in) - past_data - 1)*past_data
-        # data_y = (len(data_in) - past_data - 1)*1
-        for idx in range(len(data_in) - past_data - 1):
-            # Use past data of length past data to predict following
-            # Time slot data with single length
-            data_x.append(data_in[idx:(idx + past_data), 0])
-            data_y.append(data_in[idx + past_data, 0])
-        return np.array(data_x), np.array(data_y)
-
-    # fix random seed for reproducibility
-    tf.random.set_seed(7)
-    # load the dataset
-    # dataframe = read_csv('airline-passengers.csv', usecols=[1], engine='python')
-    # dataframe = read_csv('airline-passengers.csv', usecols=[1], engine='python')
-    dataset = dataframe.values
-    dataset = dataset.astype('float32')
-    # normalize the dataset
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    dataset = scaler.fit_transform(dataset)
-    # print(dataset)
-    # split into train and test sets
-    train_size = int(len(dataset) * 0.67)
-    test_size = len(dataset) - train_size
-    train, test = dataset[0:train_size, :], dataset[train_size:len(dataset), :]
-    # reshape into X=t and Y=t+1
-    look_back = 1
-    train_data_x, train_data_y = create_dataset(train, look_back)
-    test_data_x, test_data_y = create_dataset(test, look_back)
-    # reshape input to be [samples, time steps, features]
-    train_data_x = np.reshape(train_data_x, (train_data_x.shape[0], train_data_x.shape[1], 1))
-    test_data_x = np.reshape(test_data_x, (test_data_x.shape[0], test_data_x.shape[1], 1))
-
-    # create and fit the LSTM network
-
-    batch_size = 1
-    # model = Sequential()
-
-    print(train_data_x.shape)
-    # model_ = Model()
-    # inputs = tf.keras.input(shape=(32, 32, 1))
-    inputs = keras.Input(shape=(batch_size, train_data_x.shape[0],))  # input layer
-    x = LSTM(5)(inputs)  # hidden layer
-    outputs = Dense(1)(x)  # output layer
-    #
-    model = Model(inputs, outputs)
-    # model = Sequential(inputs, outputs)
-    # model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    # model.add(LSTM(25, input_shape=(1, look_back)))
-    # model.add(LSTM(25, input_shape=(1, look_back)))
-    # outputs = model(inputs)
-    # model.add(LSTM(4, batch_input_shape=(batch_size, look_back, 1), stateful=True, return_sequences=True))
-    # model.add(LSTM(4, batch_input_shape=(batch_size, look_back, 1), stateful=True))
-    # model.add(Dense(1))
-    model.compile(loss='mean_squared_error', optimizer='adam')
-    model.fit(train_data_x, train_data_y, epochs=10, batch_size=2, verbose=1)
-    # # for i in range(100):
-    # for i in range(5):
-    #     model.fit(trainX, trainY, epochs=1, batch_size=batch_size, verbose=2, shuffle=False)
-    #     model.reset_states()
-    # # make predictions
-    # train_predict = model.predict(trainX, batch_size=batch_size)
-    # model.reset_states()
-    # test_predict = model.predict(testX, batch_size=batch_size)
-    # # invert predictions
-    # train_predict = scaler.inverse_transform(train_predict)
-    # trainY = scaler.inverse_transform([trainY])
-    # test_predict = scaler.inverse_transform(test_predict)
-    # testY = scaler.inverse_transform([testY])
-    # # calculate root mean squared error
-    # trainScore = np.sqrt(mean_squared_error(trainY[0], train_predict[:, 0]))
-    # print('Train Score: %.2f RMSE' % (trainScore))
-    # testScore = np.sqrt(mean_squared_error(testY[0], test_predict[:, 0]))
-    # print('Test Score: %.2f RMSE' % (testScore))
-    # # shift train predictions for plotting
-    # trainPredictPlot = np.empty_like(dataset)
-    # trainPredictPlot[:, :] = np.nan
-    # trainPredictPlot[look_back:len(train_predict) + look_back, :] = train_predict
-    # # shift test predictions for plotting
-    # testPredictPlot = np.empty_like(dataset)
-    # testPredictPlot[:, :] = np.nan
-    # testPredictPlot[len(train_predict) + (look_back * 2) + 1:len(dataset) - 1, :] = test_predict
-    # # plot baseline and predictions
-    # plt.plot(scaler.inverse_transform(dataset))
-    # plt.plot(trainPredictPlot)
-    # plt.plot(testPredictPlot)
-    # plt.show()
-
-
-def modelNN2(df):
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import pandas as pd
-    from pandas import read_csv
-    import math
-    from keras.models import Sequential
-    from keras.layers import Dense
-    from keras.layers import LSTM
-    from sklearn.preprocessing import MinMaxScaler
-    from sklearn.metrics import mean_squared_error
-    from keras.layers import Dense, Activation, Dropout
-    import time  # helper libraries
-
-    # file is downloaded from finance.yahoo.com, 1.1.1997-1.1.2017
-    # training data = 1.1.1997 - 1.1.2007
-    # test data = 1.1.2007 - 1.1.2017
-    input_file = "DIS.csv"
-
-    # convert an array of values into a dataset matrix
-    def create_dataset(dataset, look_back=1):
-        dataX, dataY = [], []
-        for i in range(len(dataset) - look_back - 1):
-            a = dataset[i:(i + look_back), 0]
-            dataX.append(a)
-            dataY.append(dataset[i + look_back, 0])
-        return np.array(dataX), np.array(dataY)
-
-    # fix random seed for reproducibility
-    np.random.seed(5)
-
-    # load the dataset
-    # df = read_csv(input_file, header=None, index_col=None, delimiter=',')
-
-    # take close price column[5]
-    # all_y = df[5].values
-    # dataset = all_y.reshape(-1, 1)
-    dataset = df
-
-    # normalize the dataset
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    dataset = scaler.fit_transform(dataset)
-
-    # split into train and test sets, 50% test data, 50% training data
-    train_size = int(len(dataset) * 0.5)
-    test_size = len(dataset) - train_size
-    train, test = dataset[0:train_size, :], dataset[train_size:len(dataset), :]
-
-    # reshape into X=t and Y=t+1, timestep 240
-    look_back = 1
-    trainX, trainY = create_dataset(train, look_back)
-    testX, testY = create_dataset(test, look_back)
-
-    # reshape input to be [samples, time steps, features]
-    trainX = np.reshape(trainX, (trainX.shape[0], 1, trainX.shape[1]))
-    testX = np.reshape(testX, (testX.shape[0], 1, testX.shape[1]))
-
-    # create and fit the LSTM network, optimizer=adam, 25 neurons, dropout 0.1
-    model = Sequential()
-    model.add(LSTM(5, input_shape=(1, look_back)))
-    model.add(Dropout(0.1))
-    model.add(Dense(1))
-    model.compile(loss='mse', optimizer='adam')
-    model.fit(trainX, trainY, epochs=10, batch_size=2, verbose=1)
-
-    # make predictions
-    trainPredict = model.predict(trainX)
-    testPredict = model.predict(testX)
-
-    # invert predictions
-    trainPredict = scaler.inverse_transform(trainPredict)
-    trainY = scaler.inverse_transform([trainY])
-    testPredict = scaler.inverse_transform(testPredict)
-    testY = scaler.inverse_transform([testY])
-
-    # calculate root mean squared error
-    trainScore = math.sqrt(mean_squared_error(trainY[0], trainPredict[:, 0]))
-    print('Train Score: %.2f RMSE' % (trainScore))
-    testScore = math.sqrt(mean_squared_error(testY[0], testPredict[:, 0]))
-    print('Test Score: %.2f RMSE' % (testScore))
-
-    # shift train predictions for plotting
-    trainPredictPlot = np.empty_like(dataset)
-    trainPredictPlot[:, :] = np.nan
-    trainPredictPlot[look_back:len(trainPredict) + look_back, :] = trainPredict
-
-    # shift test predictions for plotting
-    testPredictPlot = np.empty_like(dataset)
-    testPredictPlot[:, :] = np.nan
-    testPredictPlot[len(trainPredict) + (look_back * 2) + 1:len(dataset) - 1, :] = testPredict
-
-    # plot baseline and predictions
-    plt.plot(scaler.inverse_transform(dataset))
-    plt.plot(trainPredictPlot)
-    plt.show()
-    # print('testPrices:')
-    testPrices = scaler.inverse_transform(dataset[test_size + look_back:])
-
-    # print('testPredictions:')
-    # print(testPredict)
-
-    # export prediction and actual prices
-    # df = pd.DataFrame(data={"prediction": np.around(list(testPredict.reshape(-1)), decimals=2),
-    #                         "test_price": np.around(list(testPrices.reshape(-1)), decimals=2)})
-    # df.to_csv("lstm_result.csv", sep=';', index=None)
-
-    # plot the actual price, prediction in test data=red line, actual price=blue line
-    # plt.plot(testPredictPlot)
-    # plt.show()
-
-
-def modelNN3(dataset):
-
+def modelNN1(dataset):
     from math import sqrt
     from numpy import concatenate
     from matplotlib import pyplot
@@ -252,6 +47,8 @@ def modelNN3(dataset):
     from keras.models import Sequential
     from keras.layers import Dense
     from keras.layers import LSTM
+    from sklearn.feature_selection import VarianceThreshold
+    from sklearn.decomposition import PCA
 
     # convert series to supervised learning
     def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
@@ -279,32 +76,70 @@ def modelNN3(dataset):
 
     # load dataset
     # dataset = read_csv('pollution.csv', header=0, index_col=0)
+    # print(dataset.head)
+    # dataset.insert(0, 'Close', dataset.pop('Close'))
     values = dataset.values
     # integer encode direction
     # encoder = LabelEncoder()
     # values[:, 4] = encoder.fit_transform(values[:, 4])
     # ensure all data is float
     values = values.astype('float32')
+
     # normalize features
     scaler = MinMaxScaler(feature_range=(0, 1))
     scaled = scaler.fit_transform(values)
+    # print(scaled)
     # frame as supervised learning
-    reframed = series_to_supervised(scaled, 1, 1)
+    # use 7 past day data to predict current pricing
+    reframed = series_to_supervised(scaled, 7, 1)
     # drop columns we don't want to predict
-    reframed.drop(reframed.columns[[6, 7, 8, 9]], axis=1, inplace=True)
+    # reframed.drop(reframed.columns[[6, 7, 8, 9]], axis=1, inplace=True)
+    # drop current unused data, first column is the actual price in the original data
+    # tranform data has last column as price data to predict
+    reframed.drop(reframed.columns[[36, 37, 38, 39]], axis=1, inplace=True)
+    # remove_prob = .1
+    # remove_feat = VarianceThreshold(threshold=(remove_prob * (1 - remove_prob)))
+    # reframed2 = remove_feat.fit_transform(reframed)
     # print(reframed.head())
+    # print(reframed2.head())
     #
     # split into train and test sets
     values = reframed.values
 
     train_size = int(len(reframed) * 0.7)
     test_size = len(dataset) - train_size
-    # n_train_hours = 365 * 24
-    train = values[:train_size, :]
-    test = values[train_size:, :]
+    # attempt to reduce feature via variance thresholding
+    # remove_prob = .8
+    # remove_feat = VarianceThreshold(threshold=(remove_prob * (1 - remove_prob)))
+    # remove_feat = VarianceThreshold()
+
+    # increase feature and use pca to detect or retrieve important features
+    pca = PCA(n_components=15)
+    # pca applies only on feature not only y values
+    values_2 = values[:, :-1]
+    # reframed2 = remove_feat.fit_transform(values_2)
+    values_2 = pca.fit_transform(values_2)
+    # values_2 = pca.singular_values_
+
+    values_2 = np.concatenate((values_2[:, :],
+                               values[:, -1].reshape((values[:, -1].shape[0], 1))),
+                              axis=1)
+    # values_2 = concatenate((values_2, values[:, -1]), axis=1)
+    # normalize features
+    # scaler2 = MinMaxScaler(feature_range=(0, 1))
+    # scaler2.fit(values_2)
+    # print(remove_feat.variances_)
+    # train = values[:train_size, :]
+    # test = values[train_size:, :]
+
+    train = values_2[:train_size, :]
+    test = values_2[train_size:, :]
     # split into input and outputs
     train_x, train_y = train[:, :-1], train[:, -1]
+    # train_x, train_y = train[:, :-1], train[:, -1]
+    # train_x, train_y = values_2[:train_size, :], train[:, -1]
     test_x, test_y = test[:, :-1], test[:, -1]
+    # test_x, test_y = values_2[train_size:, :], test[:, -1]
     # reshape input to be 3D [samples, timesteps, features]
     train_x = train_x.reshape((train_x.shape[0], 1, train_x.shape[1]))
     test_x = test_x.reshape((test_x.shape[0], 1, test_x.shape[1]))
@@ -328,15 +163,26 @@ def modelNN3(dataset):
 
     # make a prediction
     yhat = model.predict(test_x)
+
     test_x = test_x.reshape((test_x.shape[0], test_x.shape[2]))
     # invert scaling for forecast
-    inv_yhat = concatenate((yhat, test_x[:, 1:]), axis=1)
+    # inv_yhat = concatenate((yhat, test_x[:, 1:]), axis=1)
+
+    inv_yhat = np.concatenate((pca.inverse_transform(test_x), yhat.reshape((len(yhat), 1))), axis=1)
+    # inv_yhat = concatenate((yhat, pca.inverse_transform(test_x)), axis=1)
+
+    # normalize features
+    # inv_yhat = scaler.inverse_transform(inv_yhat)
     inv_yhat = scaler.inverse_transform(inv_yhat)
+    # inv_yhat = scaler2.inverse_transform(inv_yhat)
     inv_yhat = inv_yhat[:, 0]
     # invert scaling for actual
     test_y = test_y.reshape((len(test_y), 1))
-    inv_y = concatenate((test_y, test_x[:, 1:]), axis=1)
+    # inv_y = concatenate((test_y, test_x[:, 1:]), axis=1)
+    # inv_y = concatenate((test_y, pca.inverse_transform(test_x)), axis=1)
+    inv_y = np.concatenate((pca.inverse_transform(test_x), test_y), axis=1)
     inv_y = scaler.inverse_transform(inv_y)
+    # inv_y = scaler2.inverse_transform(inv_y)
     inv_y = inv_y[:, 0]
     # calculate RMSE
     rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
@@ -551,7 +397,8 @@ def main():
     data_here = get_hist_yahoo()
     # modelNN1(data_here[['Close']])
     # modelNN2(data_here[['Close']])
-    modelNN3(data_here)
+    data_here.insert(0, 'Close', data_here.pop('Close'))
+    modelNN1(data_here)
 
 
 if __name__ == "__main__":
