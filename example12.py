@@ -45,8 +45,8 @@ def modelNN1(dataset):
     from sklearn.preprocessing import LabelEncoder
     from sklearn.metrics import mean_squared_error
     from keras.models import Sequential
-    from keras.layers import Dense
-    from keras.layers import LSTM
+    # from keras.layers import Dense
+    from keras.layers import LSTM, Dropout, Dense
     from sklearn.feature_selection import VarianceThreshold
     from sklearn.decomposition import PCA
 
@@ -76,37 +76,33 @@ def modelNN1(dataset):
 
     # load dataset
     # dataset = read_csv('pollution.csv', header=0, index_col=0)
-    # print(dataset.head)
-    # dataset.insert(0, 'Close', dataset.pop('Close'))
-    values = dataset.values
-    # integer encode direction
-    # encoder = LabelEncoder()
-    # values[:, 4] = encoder.fit_transform(values[:, 4])
+    values_to_build_past_next_relationship = dataset.values
     # ensure all data is float
-    values = values.astype('float32')
+    values_to_build_past_next_relationship = values_to_build_past_next_relationship.astype('float32')
 
     # normalize features
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled = scaler.fit_transform(values)
+    # scaler = MinMaxScaler(feature_range=(0, 1))
+    # scaled = scaler.fit_transform(values)
     # print(scaled)
     # frame as supervised learning
     # use 7 past day data to predict current pricing
-    reframed = series_to_supervised(scaled, 7, 1)
+    # reframed = series_to_supervised(scaled, 7, 1)
+    mum_past_days = 1
+    mum_next_days = 1
+    values_with_past_next_relationship = series_to_supervised(values_to_build_past_next_relationship,
+                                                              mum_past_days, mum_next_days)
     # drop columns we don't want to predict
     # reframed.drop(reframed.columns[[6, 7, 8, 9]], axis=1, inplace=True)
     # drop current unused data, first column is the actual price in the original data
     # tranform data has last column as price data to predict
-    reframed.drop(reframed.columns[[36, 37, 38, 39]], axis=1, inplace=True)
-    # remove_prob = .1
-    # remove_feat = VarianceThreshold(threshold=(remove_prob * (1 - remove_prob)))
-    # reframed2 = remove_feat.fit_transform(reframed)
-    # print(reframed.head())
-    # print(reframed2.head())
-    #
+    # values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[36, 37, 38, 39]],
+    values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[6, 7, 8, 9]],
+                                            axis=1,
+                                            inplace=True)
     # split into train and test sets
-    values = reframed.values
+    values_with_past_next_relationship = values_with_past_next_relationship.values
 
-    train_size = int(len(reframed) * 0.7)
+    train_size = int(len(values_with_past_next_relationship) * 0.7)
     test_size = len(dataset) - train_size
     # attempt to reduce feature via variance thresholding
     # remove_prob = .8
@@ -114,46 +110,75 @@ def modelNN1(dataset):
     # remove_feat = VarianceThreshold()
 
     # increase feature and use pca to detect or retrieve important features
-    pca = PCA(n_components=15)
+    pca_component = values_with_past_next_relationship.shape[1] - 2
+    scaler_pca = PCA(n_components=pca_component)
     # pca applies only on feature not only y values
-    values_2 = values[:, :-1]
-    # reframed2 = remove_feat.fit_transform(values_2)
-    values_2 = pca.fit_transform(values_2)
-    # values_2 = pca.singular_values_
+    features_with_past_next_relationship = values_with_past_next_relationship[:, :-1]
+    main_val_to_predict = values_with_past_next_relationship[:, -1]
+    main_val_to_predict = main_val_to_predict.reshape(len(main_val_to_predict), 1)
 
-    values_2 = np.concatenate((values_2[:, :],
-                               values[:, -1].reshape((values[:, -1].shape[0], 1))),
-                              axis=1)
-    # values_2 = concatenate((values_2, values[:, -1]), axis=1)
-    # normalize features
-    # scaler2 = MinMaxScaler(feature_range=(0, 1))
-    # scaler2.fit(values_2)
-    # print(remove_feat.variances_)
-    # train = values[:train_size, :]
-    # test = values[train_size:, :]
+    features_with_past_next_relationship_pca = scaler_pca.fit_transform(features_with_past_next_relationship)
 
-    train = values_2[:train_size, :]
-    test = values_2[train_size:, :]
-    # split into input and outputs
-    train_x, train_y = train[:, :-1], train[:, -1]
-    # train_x, train_y = train[:, :-1], train[:, -1]
-    # train_x, train_y = values_2[:train_size, :], train[:, -1]
-    test_x, test_y = test[:, :-1], test[:, -1]
-    # test_x, test_y = values_2[train_size:, :], test[:, -1]
+    values_with_past_next_relationship_pca = np.concatenate((features_with_past_next_relationship,
+                                                             main_val_to_predict),
+                                                            axis=1)
+
+    scaler_min_max = MinMaxScaler(feature_range=(0, 1))
+    values_with_past_next_relationship_pca_norm = scaler_min_max.fit_transform(values_with_past_next_relationship_pca)
+
+    train_x = features_with_past_next_relationship[:train_size, :-1]
+    test_x = features_with_past_next_relationship[train_size:, :-1]
+
+    train_y = main_val_to_predict[:train_size, -1]
+    test_y = main_val_to_predict[train_size:, -1]
+
+    train_x_pca_norm = values_with_past_next_relationship_pca_norm[:train_size, :-1]
+    test_x_pca_norm = values_with_past_next_relationship_pca_norm[train_size:, :-1]
+
+    train_y_norm = values_with_past_next_relationship_pca_norm[:train_size, :-1]
+    test_y_norm = values_with_past_next_relationship_pca_norm[train_size:, :-1]
+
     # reshape input to be 3D [samples, timesteps, features]
-    train_x = train_x.reshape((train_x.shape[0], 1, train_x.shape[1]))
-    test_x = test_x.reshape((test_x.shape[0], 1, test_x.shape[1]))
-    # print(train_x.shape, train_y.shape, test_X.shape, test_y.shape)
+    train_x_pca_norm = train_x_pca_norm.reshape((train_x_pca_norm.shape[0], 1,
+                                                 train_x_pca_norm.shape[1]))
+    test_x_pca_norm = test_x_pca_norm.reshape((test_x_pca_norm.shape[0], 1,
+                                               test_x_pca_norm.shape[1]))
     #
     # design network
     model = Sequential()
-    model.add(LSTM(5, input_shape=(train_x.shape[1], train_x.shape[2])))
+
+    num_lstm_1_unit = 100
+    num_lstm_2_unit = 80
+    num_lstm_3_unit = 50
+    num_lstm_4_unit = 30
+
+    prob_drop_1_unit = .1
+    prob_drop_2_unit = .2
+    prob_drop_3_unit = .3
+    prob_drop_4_unit = .4
+
+    model.add(LSTM(num_lstm_1_unit,
+                   input_shape=(train_x_pca_norm.shape[1], train_x_pca_norm.shape[2]),
+                   return_sequences=True))
+
+    model.add(Dropout(prob_drop_1_unit))
+
+    model.add(LSTM(num_lstm_2_unit, return_sequences=True))
+    model.add(Dropout(prob_drop_2_unit))
+
+    model.add(LSTM(num_lstm_3_unit, return_sequences=True))
+    model.add(Dropout(prob_drop_3_unit))
+
+    model.add(LSTM(num_lstm_4_unit))
+    model.add(Dropout(prob_drop_4_unit))
+
     model.add(Dense(1))
-    model.compile(loss='mae', optimizer='adam')
+    model.compile(loss='mse', optimizer='adam')
+
     # fit network
-    history = model.fit(train_x, train_y,
-                        epochs=5, batch_size=2,
-                        validation_data=(test_x, test_y),
+    history = model.fit(train_x_pca_norm, train_y_norm,
+                        epochs=50, batch_size=20,
+                        validation_data=(test_x_pca_norm, test_y_norm),
                         verbose=2, shuffle=False)
     # plot history
     pyplot.plot(history.history['loss'], label='train')
@@ -162,30 +187,22 @@ def modelNN1(dataset):
     pyplot.show()
 
     # make a prediction
-    yhat = model.predict(test_x)
+    test_y_pred_norm = model.predict(test_x_pca_norm)
 
-    test_x = test_x.reshape((test_x.shape[0], test_x.shape[2]))
-    # invert scaling for forecast
-    # inv_yhat = concatenate((yhat, test_x[:, 1:]), axis=1)
+    test_x_pca_norm = test_x_pca_norm.reshape((test_x_pca_norm.shape[0],
+                                               test_x_pca_norm.shape[2]))
 
-    inv_yhat = np.concatenate((pca.inverse_transform(test_x), yhat.reshape((len(yhat), 1))), axis=1)
-    # inv_yhat = concatenate((yhat, pca.inverse_transform(test_x)), axis=1)
+    test_y_pred_norm = test_y_pred_norm.reshape((len(test_y_pred_norm), 1))
 
-    # normalize features
-    # inv_yhat = scaler.inverse_transform(inv_yhat)
-    inv_yhat = scaler.inverse_transform(inv_yhat)
-    # inv_yhat = scaler2.inverse_transform(inv_yhat)
-    inv_yhat = inv_yhat[:, 0]
-    # invert scaling for actual
-    test_y = test_y.reshape((len(test_y), 1))
-    # inv_y = concatenate((test_y, test_x[:, 1:]), axis=1)
-    # inv_y = concatenate((test_y, pca.inverse_transform(test_x)), axis=1)
-    inv_y = np.concatenate((pca.inverse_transform(test_x), test_y), axis=1)
-    inv_y = scaler.inverse_transform(inv_y)
-    # inv_y = scaler2.inverse_transform(inv_y)
-    inv_y = inv_y[:, 0]
-    # calculate RMSE
-    rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
+    test_values_pred_pca_norm = np.concatenate((test_x_pca_norm, test_y_pred_norm), axis=1)
+
+    # # # invert scaling for actual
+    test_values_pred_pca = scaler_min_max.inverse_transform(test_values_pred_pca_norm)
+
+    test_y_pred = test_values_pred_pca[:, -1]
+
+    # # calculate RMSE
+    rmse = sqrt(mean_squared_error(test_y, test_y_pred))
     print('Test RMSE: %.3f' % rmse)
 
 
