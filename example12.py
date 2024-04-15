@@ -32,47 +32,72 @@ from keras.layers import LSTM
 # from keras.inputs import Inputs
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
+from keras.models import load_model
+
+from math import sqrt
+from numpy import concatenate
+from matplotlib import pyplot
+# from pandas import read_csv
+from pandas import DataFrame
+from pandas import concat
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import mean_squared_error
+from keras.models import Sequential
+# from keras.layers import Dense
+from keras.layers import LSTM, Dropout, Dense
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.decomposition import PCA
+
+# scaler_filename = "scaler.save"
+# joblib.dump(scaler, scaler_filename)
+
+# And now to load...
+
+# scaler = joblib.load(scaler_filename)
+cwd = os.getcwd()
+
+
+# convert series to supervised learning
+def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
+    n_vars = 1 if type(data) is list else data.shape[1]
+    df = DataFrame(data)
+    cols, names = list(), list()
+    # input sequence (t-n, ... t-1)
+    for i in range(n_in, 0, -1):
+        cols.append(df.shift(i))
+        names += [('var%d(t-%d)' % (j + 1, i)) for j in range(n_vars)]
+    # forecast sequence (t, t+1, ... t+n)
+    for i in range(0, n_out):
+        cols.append(df.shift(-i))
+        if i == 0:
+            names += [('var%d(t)' % (j + 1)) for j in range(n_vars)]
+        else:
+            names += [('var%d(t+%d)' % (j + 1, i)) for j in range(n_vars)]
+    # put it all together
+    agg = concat(cols, axis=1)
+    agg.columns = names
+    # drop rows with NaN values
+    if dropnan:
+        agg.dropna(inplace=True)
+    return agg
 
 
 def modelNN1(dataset):
-    from math import sqrt
-    from numpy import concatenate
-    from matplotlib import pyplot
-    # from pandas import read_csv
-    from pandas import DataFrame
-    from pandas import concat
-    from sklearn.preprocessing import MinMaxScaler
-    from sklearn.preprocessing import LabelEncoder
-    from sklearn.metrics import mean_squared_error
-    from keras.models import Sequential
-    # from keras.layers import Dense
-    from keras.layers import LSTM, Dropout, Dense
-    from sklearn.feature_selection import VarianceThreshold
-    from sklearn.decomposition import PCA
-
-    # convert series to supervised learning
-    def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
-        n_vars = 1 if type(data) is list else data.shape[1]
-        df = DataFrame(data)
-        cols, names = list(), list()
-        # input sequence (t-n, ... t-1)
-        for i in range(n_in, 0, -1):
-            cols.append(df.shift(i))
-            names += [('var%d(t-%d)' % (j + 1, i)) for j in range(n_vars)]
-        # forecast sequence (t, t+1, ... t+n)
-        for i in range(0, n_out):
-            cols.append(df.shift(-i))
-            if i == 0:
-                names += [('var%d(t)' % (j + 1)) for j in range(n_vars)]
-            else:
-                names += [('var%d(t+%d)' % (j + 1, i)) for j in range(n_vars)]
-        # put it all together
-        agg = concat(cols, axis=1)
-        agg.columns = names
-        # drop rows with NaN values
-        if dropnan:
-            agg.dropna(inplace=True)
-        return agg
+    # from math import sqrt
+    # from numpy import concatenate
+    # from matplotlib import pyplot
+    # # from pandas import read_csv
+    # from pandas import DataFrame
+    # from pandas import concat
+    # from sklearn.preprocessing import MinMaxScaler
+    # from sklearn.preprocessing import LabelEncoder
+    # from sklearn.metrics import mean_squared_error
+    # from keras.models import Sequential
+    # # from keras.layers import Dense
+    # from keras.layers import LSTM, Dropout, Dense
+    # from sklearn.feature_selection import VarianceThreshold
+    # from sklearn.decomposition import PCA
 
     # load dataset
     # dataset = read_csv('pollution.csv', header=0, index_col=0)
@@ -88,7 +113,7 @@ def modelNN1(dataset):
     # frame as supervised learning
     # use 7 past day data to predict current pricing
     # reframed = series_to_supervised(scaled, 7, 1)
-    # 5 working days prediction, monday to friday
+    # 7 working days prediction, monday to friday
     mum_past_days = 7
     mum_next_days = 7
     values_with_past_next_relationship = series_to_supervised(values_to_build_past_next_relationship,
@@ -218,6 +243,12 @@ def modelNN1(dataset):
 
     # # calculate RMSE
     rmse = sqrt(mean_squared_error(test_y, test_y_pred))
+
+    model.save(f'{cwd}/resource/models/model_lstm_1_regression.keras')
+    with open(f'{cwd}/resource/models/scaler_min_max_1.pkl', 'wb') as f:
+        pickle.dump(scaler_min_max, f)
+    with open(f'{cwd}/resource/models/scaler_pca_1.pkl', 'wb') as f:
+        pickle.dump(scaler_pca, f)
     print('Test RMSE: %.3f' % rmse)
 
 
@@ -423,6 +454,88 @@ def get_hist(_email, _api_secret, _api_key):
     plt.show()
 
 
+def preprocess_1(df):
+    """
+    Create the target variable
+    """
+    df['Close'] = df['Close'].pct_change(-1)
+    df.Close = df.Close * -1
+    df.Close = df.Close * 100
+    # Remove rows with any missing data
+    df = df.dropna().copy()
+    # print(df.head)
+
+
+def get_last_7(data_in):
+    data_raw_7 = data_in.iloc[-15:, :]
+    print(data_raw_7)
+    return data_raw_7
+
+
+def get_feat_last_7(data_7):
+    # data_raw_7 = data_here.iloc[-8:-1, :]
+    # print(data_raw_7)
+    values_to_build_past_next_relationship = data_7.values
+    # ensure all data is float
+    values_to_build_past_next_relationship = values_to_build_past_next_relationship.astype('float32')
+    num_feat = values_to_build_past_next_relationship.shape[1]
+
+    # 7 working days prediction, monday to friday
+    mum_past_days = 7
+    mum_next_days = 1
+    values_with_past_next_relationship = series_to_supervised(values_to_build_past_next_relationship,
+                                                              mum_past_days, mum_next_days)
+    values_with_past_next_relationship = values_with_past_next_relationship.tail(1)
+
+    col_drop_list = []
+    for col_drop in range(num_feat * mum_past_days, num_feat * (mum_next_days + mum_past_days), 1):
+        col_drop_list.append(col_drop)
+
+    values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[col_drop_list],
+                                            axis=1,
+                                            inplace=True)
+    # increase feature and use pca to detect or retrieve important features
+    with open(f'{cwd}/resource/models/scaler_pca_1.pkl', 'rb') as f:
+        scaler_pca = pickle.load(f)
+    # pca applies only on feature not only y values
+    features_with_past_next_relationship = values_with_past_next_relationship.values
+    print(features_with_past_next_relationship.shape)
+
+    features_with_past_next_relationship_pca = scaler_pca.transform(features_with_past_next_relationship)
+
+    scaler_min_max_loc = MinMaxScaler(feature_range=(0, 1))
+    values_with_past_next_relationship_pca_norm = scaler_min_max_loc.fit_transform(features_with_past_next_relationship)
+
+    return values_with_past_next_relationship_pca_norm
+
+
+def predict_1(data_feat_in):
+    # model.save(f'{cwd}/resource/models/model_lstm_1_regression..keras')
+    model = load_model(f'{cwd}/resource/models/model_lstm_1_regression.keras')
+    with open(f'{cwd}/resource/models/scaler_min_max_1.pkl', 'rb') as f:
+        scaler_min_max = pickle.load(f)
+    mum_next_days = 7
+    data_feat_in
+    # make a prediction
+    data_feat_in_pred = data_feat_in.reshape((data_feat_in.shape[0], 1,
+                                              data_feat_in.shape[1]))
+    test_y_pred_norm = model.predict(data_feat_in_pred)
+
+    test_x_pca_norm = data_feat_in
+
+    test_y_pred_norm = test_y_pred_norm.reshape((len(test_y_pred_norm), mum_next_days))
+
+    test_values_pred_pca_norm = np.concatenate((test_x_pca_norm, test_y_pred_norm), axis=1)
+
+    # # # invert scaling for actual
+    test_values_pred_pca = scaler_min_max.inverse_transform(test_values_pred_pca_norm)
+
+    test_y_pred = test_values_pred_pca[:, -mum_next_days:]
+
+    print(test_y_pred)
+    return test_y_pred
+
+
 def main():
     # ui.load_data(set_single_buy)
     # ui.load_data(get_hist)
@@ -430,7 +543,12 @@ def main():
     # modelNN1(data_here[['Close']])
     # modelNN2(data_here[['Close']])
     data_here.insert(0, 'Close', data_here.pop('Close'))
-    modelNN1(data_here)
+    preprocess_1(data_here)
+
+    # modelNN1(data_here)
+    past_7_data = get_last_7(data_here)
+    past_7_data_feat = get_feat_last_7(past_7_data)
+    pred_data = predict_1(past_7_data_feat)
 
 
 if __name__ == "__main__":
