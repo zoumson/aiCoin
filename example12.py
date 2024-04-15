@@ -83,51 +83,25 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     return agg
 
 
-def modelNN1(dataset):
-    # from math import sqrt
-    # from numpy import concatenate
-    # from matplotlib import pyplot
-    # # from pandas import read_csv
-    # from pandas import DataFrame
-    # from pandas import concat
-    # from sklearn.preprocessing import MinMaxScaler
-    # from sklearn.preprocessing import LabelEncoder
-    # from sklearn.metrics import mean_squared_error
-    # from keras.models import Sequential
-    # # from keras.layers import Dense
-    # from keras.layers import LSTM, Dropout, Dense
-    # from sklearn.feature_selection import VarianceThreshold
-    # from sklearn.decomposition import PCA
-
+def model_nn_1(dataset,
+               file_name_save_model, file_name_save_scaler_min_max, file_name_save_scaler_pca,
+               mum_past_days=1, mum_next_days=1, pca_component_offset=2, train_ratio=.7,
+               epoc_size=50, bat_size=20,
+               num_lstm=None,
+               prob_drop=None):
     # load dataset
-    # dataset = read_csv('pollution.csv', header=0, index_col=0)
+    if prob_drop is None:
+        prob_drop = [.1, .2, .3, .4]
+    if num_lstm is None:
+        num_lstm = [100, 80, 50, 30]
     values_to_build_past_next_relationship = dataset.values
     # ensure all data is float
     values_to_build_past_next_relationship = values_to_build_past_next_relationship.astype('float32')
     num_feat = values_to_build_past_next_relationship.shape[1]
 
-    # normalize features
-    # scaler = MinMaxScaler(feature_range=(0, 1))
-    # scaled = scaler.fit_transform(values)
-    # print(scaled)
     # frame as supervised learning
-    # use 7 past day data to predict current pricing
-    # reframed = series_to_supervised(scaled, 7, 1)
-    # 7 working days prediction, monday to friday
-    mum_past_days = 7
-    mum_next_days = 7
     values_with_past_next_relationship = series_to_supervised(values_to_build_past_next_relationship,
                                                               mum_past_days, mum_next_days)
-    # drop columns we don't want to predict
-    # reframed.drop(reframed.columns[[6, 7, 8, 9]], axis=1, inplace=True)
-    # drop current unused data, first column is the actual price in the original data
-    # tranform data has last column as price data to predict
-    # values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[36, 37, 38, 39]],
-    # values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[6, 7, 8, 9]],
-    # values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[6, 7, 8, 9]],
-    #                                         axis=1,
-    #                                         inplace=True)
-    # num_feat * (mum_next_days + mum_past_days) - 1
     col_drop_list = []
     for col_drop in range(num_feat * mum_past_days + 1, num_feat * (mum_next_days + mum_past_days), 1):
         if col_drop % num_feat != 0:
@@ -137,20 +111,14 @@ def modelNN1(dataset):
                                             axis=1,
                                             inplace=True)
 
-    # print(values_with_past_next_relationship.iloc[0:3, -11:-5])
-    # return
     # split into train and test sets
     values_with_past_next_relationship = values_with_past_next_relationship.values
 
-    train_size = int(len(values_with_past_next_relationship) * 0.7)
+    train_size = int(len(values_with_past_next_relationship) * train_ratio)
     test_size = len(dataset) - train_size
-    # attempt to reduce feature via variance thresholding
-    # remove_prob = .8
-    # remove_feat = VarianceThreshold(threshold=(remove_prob * (1 - remove_prob)))
-    # remove_feat = VarianceThreshold()
 
     # increase feature and use pca to detect or retrieve important features
-    pca_component = num_feat * mum_past_days - 2
+    pca_component = num_feat * mum_past_days - pca_component_offset
     scaler_pca = PCA(n_components=pca_component)
     # pca applies only on feature not only y values
     features_with_past_next_relationship = values_with_past_next_relationship[:, :-mum_next_days]
@@ -187,37 +155,25 @@ def modelNN1(dataset):
     # design network
     model = Sequential()
 
-    num_lstm_1_unit = 100
-    num_lstm_2_unit = 80
-    num_lstm_3_unit = 50
-    num_lstm_4_unit = 30
-
-    prob_drop_1_unit = .1
-    prob_drop_2_unit = .2
-    prob_drop_3_unit = .3
-    prob_drop_4_unit = .4
-
-    model.add(LSTM(num_lstm_1_unit,
+    model.add(LSTM(num_lstm[0],
                    input_shape=(train_x_pca_norm.shape[1], train_x_pca_norm.shape[2]),
                    return_sequences=True))
 
-    model.add(Dropout(prob_drop_1_unit))
+    model.add(Dropout(prob_drop[0]))
 
-    model.add(LSTM(num_lstm_2_unit, return_sequences=True))
-    model.add(Dropout(prob_drop_2_unit))
+    for i in range(1, len(num_lstm)):
+        model.add(LSTM(num_lstm[i], return_sequences=True))
+        model.add(Dropout(prob_drop[i]))
 
-    model.add(LSTM(num_lstm_3_unit, return_sequences=True))
-    model.add(Dropout(prob_drop_3_unit))
-
-    model.add(LSTM(num_lstm_4_unit))
-    model.add(Dropout(prob_drop_4_unit))
+    model.add(LSTM(num_lstm[-1]))
+    model.add(Dropout(prob_drop[-1]))
 
     model.add(Dense(mum_next_days))
     model.compile(loss='mse', optimizer='adam')
 
     # fit network
     history = model.fit(train_x_pca_norm, train_y_norm,
-                        epochs=50, batch_size=20,
+                        epochs=epoc_size, batch_size=bat_size,
                         validation_data=(test_x_pca_norm, test_y_norm),
                         verbose=2, shuffle=False)
     # plot history
@@ -244,10 +200,10 @@ def modelNN1(dataset):
     # # calculate RMSE
     rmse = sqrt(mean_squared_error(test_y, test_y_pred))
 
-    model.save(f'{cwd}/resource/models/model_lstm_1_regression.keras')
-    with open(f'{cwd}/resource/models/scaler_min_max_1.pkl', 'wb') as f:
+    model.save(file_name_save_model)
+    with open(file_name_save_scaler_min_max, 'wb') as f:
         pickle.dump(scaler_min_max, f)
-    with open(f'{cwd}/resource/models/scaler_pca_1.pkl', 'wb') as f:
+    with open(file_name_save_scaler_pca, 'wb') as f:
         pickle.dump(scaler_pca, f)
     print('Test RMSE: %.3f' % rmse)
 
@@ -458,21 +414,24 @@ def preprocess_1(df):
     """
     Create the target variable
     """
+    print(df.head(3))
     df['Close'] = df['Close'].pct_change(-1)
     df.Close = df.Close * -1
     df.Close = df.Close * 100
     # Remove rows with any missing data
     df = df.dropna().copy()
+    # print(df.head(3))
     # print(df.head)
+    return df
 
 
 def get_last_7(data_in):
     data_raw_7 = data_in.iloc[-15:, :]
-    print(data_raw_7)
+    # print(data_raw_7)
     return data_raw_7
 
 
-def get_feat_last_7(data_7):
+def get_feat_last_7(data_7, file_name_scaler_pca, mum_past_days=1, mum_next_days=1):
     # data_raw_7 = data_here.iloc[-8:-1, :]
     # print(data_raw_7)
     values_to_build_past_next_relationship = data_7.values
@@ -481,8 +440,8 @@ def get_feat_last_7(data_7):
     num_feat = values_to_build_past_next_relationship.shape[1]
 
     # 7 working days prediction, monday to friday
-    mum_past_days = 7
-    mum_next_days = 1
+    # mum_past_days = 1
+    # mum_next_days = 1
     values_with_past_next_relationship = series_to_supervised(values_to_build_past_next_relationship,
                                                               mum_past_days, mum_next_days)
     values_with_past_next_relationship = values_with_past_next_relationship.tail(1)
@@ -495,7 +454,7 @@ def get_feat_last_7(data_7):
                                             axis=1,
                                             inplace=True)
     # increase feature and use pca to detect or retrieve important features
-    with open(f'{cwd}/resource/models/scaler_pca_1.pkl', 'rb') as f:
+    with open(file_name_scaler_pca, 'rb') as f:
         scaler_pca = pickle.load(f)
     # pca applies only on feature not only y values
     features_with_past_next_relationship = values_with_past_next_relationship.values
@@ -509,12 +468,12 @@ def get_feat_last_7(data_7):
     return values_with_past_next_relationship_pca_norm
 
 
-def predict_1(data_feat_in):
+def predict_1(data_feat_in, file_name_model, file_name_scaler_min_max):
     # model.save(f'{cwd}/resource/models/model_lstm_1_regression..keras')
-    model = load_model(f'{cwd}/resource/models/model_lstm_1_regression.keras')
-    with open(f'{cwd}/resource/models/scaler_min_max_1.pkl', 'rb') as f:
+    model = load_model(file_name_model)
+    with open(file_name_scaler_min_max, 'rb') as f:
         scaler_min_max = pickle.load(f)
-    mum_next_days = 7
+    mum_next_days = 1
     data_feat_in
     # make a prediction
     data_feat_in_pred = data_feat_in.reshape((data_feat_in.shape[0], 1,
@@ -545,10 +504,10 @@ def main():
     data_here.insert(0, 'Close', data_here.pop('Close'))
     preprocess_1(data_here)
 
-    # modelNN1(data_here)
-    past_7_data = get_last_7(data_here)
-    past_7_data_feat = get_feat_last_7(past_7_data)
-    pred_data = predict_1(past_7_data_feat)
+    model_nn_1(data_here)
+    # past_7_data = get_last_7(data_here)
+    # past_7_data_feat = get_feat_last_7(past_7_data)
+    # pred_data = predict_1(past_7_data_feat)
 
 
 if __name__ == "__main__":
