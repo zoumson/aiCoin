@@ -79,6 +79,7 @@ def modelNN1(dataset):
     values_to_build_past_next_relationship = dataset.values
     # ensure all data is float
     values_to_build_past_next_relationship = values_to_build_past_next_relationship.astype('float32')
+    num_feat = values_to_build_past_next_relationship.shape[1]
 
     # normalize features
     # scaler = MinMaxScaler(feature_range=(0, 1))
@@ -87,8 +88,9 @@ def modelNN1(dataset):
     # frame as supervised learning
     # use 7 past day data to predict current pricing
     # reframed = series_to_supervised(scaled, 7, 1)
-    mum_past_days = 1
-    mum_next_days = 1
+    # 5 working days prediction, monday to friday
+    mum_past_days = 7
+    mum_next_days = 7
     values_with_past_next_relationship = series_to_supervised(values_to_build_past_next_relationship,
                                                               mum_past_days, mum_next_days)
     # drop columns we don't want to predict
@@ -96,9 +98,22 @@ def modelNN1(dataset):
     # drop current unused data, first column is the actual price in the original data
     # tranform data has last column as price data to predict
     # values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[36, 37, 38, 39]],
-    values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[6, 7, 8, 9]],
+    # values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[6, 7, 8, 9]],
+    # values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[[6, 7, 8, 9]],
+    #                                         axis=1,
+    #                                         inplace=True)
+    # num_feat * (mum_next_days + mum_past_days) - 1
+    col_drop_list = []
+    for col_drop in range(num_feat * mum_past_days + 1, num_feat * (mum_next_days + mum_past_days), 1):
+        if col_drop % num_feat != 0:
+            col_drop_list.append(col_drop)
+
+    values_with_past_next_relationship.drop(values_with_past_next_relationship.columns[col_drop_list],
                                             axis=1,
                                             inplace=True)
+
+    # print(values_with_past_next_relationship.iloc[0:3, -11:-5])
+    # return
     # split into train and test sets
     values_with_past_next_relationship = values_with_past_next_relationship.values
 
@@ -110,12 +125,12 @@ def modelNN1(dataset):
     # remove_feat = VarianceThreshold()
 
     # increase feature and use pca to detect or retrieve important features
-    pca_component = values_with_past_next_relationship.shape[1] - 2
+    pca_component = num_feat * mum_past_days - 2
     scaler_pca = PCA(n_components=pca_component)
     # pca applies only on feature not only y values
-    features_with_past_next_relationship = values_with_past_next_relationship[:, :-1]
-    main_val_to_predict = values_with_past_next_relationship[:, -1]
-    main_val_to_predict = main_val_to_predict.reshape(len(main_val_to_predict), 1)
+    features_with_past_next_relationship = values_with_past_next_relationship[:, :-mum_next_days]
+    main_val_to_predict = values_with_past_next_relationship[:, -mum_next_days:]
+    main_val_to_predict = main_val_to_predict.reshape(len(main_val_to_predict), mum_next_days)
 
     features_with_past_next_relationship_pca = scaler_pca.fit_transform(features_with_past_next_relationship)
 
@@ -126,17 +141,17 @@ def modelNN1(dataset):
     scaler_min_max = MinMaxScaler(feature_range=(0, 1))
     values_with_past_next_relationship_pca_norm = scaler_min_max.fit_transform(values_with_past_next_relationship_pca)
 
-    train_x = features_with_past_next_relationship[:train_size, :-1]
-    test_x = features_with_past_next_relationship[train_size:, :-1]
+    train_x = features_with_past_next_relationship[:train_size, :-mum_next_days]
+    test_x = features_with_past_next_relationship[train_size:, :-mum_next_days]
 
-    train_y = main_val_to_predict[:train_size, -1]
-    test_y = main_val_to_predict[train_size:, -1]
+    train_y = main_val_to_predict[:train_size, -mum_next_days:]
+    test_y = main_val_to_predict[train_size:, -mum_next_days:]
 
-    train_x_pca_norm = values_with_past_next_relationship_pca_norm[:train_size, :-1]
-    test_x_pca_norm = values_with_past_next_relationship_pca_norm[train_size:, :-1]
+    train_x_pca_norm = values_with_past_next_relationship_pca_norm[:train_size, :-mum_next_days]
+    test_x_pca_norm = values_with_past_next_relationship_pca_norm[train_size:, :-mum_next_days]
 
-    train_y_norm = values_with_past_next_relationship_pca_norm[:train_size, :-1]
-    test_y_norm = values_with_past_next_relationship_pca_norm[train_size:, :-1]
+    train_y_norm = values_with_past_next_relationship_pca_norm[:train_size, -mum_next_days:]
+    test_y_norm = values_with_past_next_relationship_pca_norm[train_size:, -mum_next_days:]
 
     # reshape input to be 3D [samples, timesteps, features]
     train_x_pca_norm = train_x_pca_norm.reshape((train_x_pca_norm.shape[0], 1,
@@ -172,7 +187,7 @@ def modelNN1(dataset):
     model.add(LSTM(num_lstm_4_unit))
     model.add(Dropout(prob_drop_4_unit))
 
-    model.add(Dense(1))
+    model.add(Dense(mum_next_days))
     model.compile(loss='mse', optimizer='adam')
 
     # fit network
@@ -192,14 +207,14 @@ def modelNN1(dataset):
     test_x_pca_norm = test_x_pca_norm.reshape((test_x_pca_norm.shape[0],
                                                test_x_pca_norm.shape[2]))
 
-    test_y_pred_norm = test_y_pred_norm.reshape((len(test_y_pred_norm), 1))
+    test_y_pred_norm = test_y_pred_norm.reshape((len(test_y_pred_norm), mum_next_days))
 
     test_values_pred_pca_norm = np.concatenate((test_x_pca_norm, test_y_pred_norm), axis=1)
 
     # # # invert scaling for actual
     test_values_pred_pca = scaler_min_max.inverse_transform(test_values_pred_pca_norm)
 
-    test_y_pred = test_values_pred_pca[:, -1]
+    test_y_pred = test_values_pred_pca[:, -mum_next_days:]
 
     # # calculate RMSE
     rmse = sqrt(mean_squared_error(test_y, test_y_pred))
