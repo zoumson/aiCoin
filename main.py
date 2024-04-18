@@ -18,7 +18,9 @@ if __name__ == '__main__':
     # e3.ex32('SOL-USD')
     # e3.ex33('SOL-USD')
     # e3.ex34('SOL-USD')
-    e4.ex41('SOL-USD')
+    # e4.ex41('SOL-USD')
+    e1.ex13_2()
+    # ex13_2
 
 
 

@@ -120,6 +120,12 @@ def model_nn_1(dataset,
                                             axis=1,
                                             inplace=True)
 
+    # return
+    # values_with_past_next_relationship.loc[values_with_past_next_relationship['var1(t)'] >= 0, 'var1(t)'] = 1
+    # values_with_past_next_relationship.loc[values_with_past_next_relationship['var1(t)'] < 0, 'var1(t)'] = 0
+    # print(values_with_past_next_relationship.head(5))
+    # return
+
     # split into train and test sets
     values_with_past_next_relationship = values_with_past_next_relationship.values
 
@@ -182,11 +188,31 @@ def model_nn_1(dataset,
     #
     # design network
     model = Sequential()
+    model.add(LSTM(50,activation='tanh',
+                   # input_shape=(train_x_pca_norm.shape[0], train_x_pca_norm.shape[1])))
+                   input_shape=(train_x_pca_norm.shape[1], train_x_pca_norm.shape[2])))
+    # model.add(Dense(1, activation='sigmoid'))
+    model.add(Dense(1, activation='tanh'))
+    # model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
+    print(model.summary())
+    model.fit(train_x_pca_norm, train_y_norm, epochs=2, batch_size=2)
+    # Final evaluation of the model
+    scores = model.evaluate(test_x_pca_norm, test_y_norm, verbose=0)
+    Y_test_pred = np.array(model.predict(test_x_pca_norm))
+    # Y_test_pred = 1*np.array(tf.greater(Y_test_pred, .5))
+    print("Accuracy: %.2f%%" % (scores[1] * 100))
+
+    pos = [sum(y >= 0 for y in x) for x in zip(*Y_test_pred)]
+    neg = [len(Y_test_pred) - x for x in pos]
+    print(pos, neg)
+    print(Y_test_pred)
+    return
     #
     # model.add(LSTM(num_lstm[0], activation='tanh',
     #                input_shape=(train_x_pca_norm.shape[1], train_x_pca_norm.shape[2]),
     #                return_sequences=True))
-    model.add(LSTM(200, activation='tanh', input_shape=(train_x_pca_norm.shape[1], train_x_pca_norm.shape[2])))
+    # model.add(LSTM(200, activation='tanh', input_shape=(train_x_pca_norm.shape[1], train_x_pca_norm.shape[2])))
     # model.add(LSTM(200, input_shape=(train_x_pca_norm.shape[1], train_x_pca_norm.shape[2]),
     #                return_sequences=True))
     # model.add(Dropout(.1))
@@ -466,7 +492,8 @@ def preprocess_1(df):
     # print(df.head(3))
     df['Close'] = df['Close'].pct_change(-1)
     df.Close = df.Close * -1
-    df.Close = df.Close * 100
+    # df.Close = df.Close * 100
+    # df.Close = df.Close *
 
     # Remove rows with any missing data
     df = df.dropna().copy()
@@ -579,8 +606,51 @@ def predict_1(data_feat_in, file_name_model, file_name_scaler_min_max):
     print(test_y_pred)
     return test_y_pred
 
+def ex_lstm_class():
+    # LSTM for sequence classification in the IMDB dataset
+    import tensorflow as tf
+    from keras.datasets import imdb
+    from keras.models import Sequential
+    from keras.layers import Dense
+    from keras.layers import LSTM
+    from keras.layers import Embedding
+    from keras.preprocessing import sequence
+    # fix random seed for reproducibility
+    tf.random.set_seed(7)
+    # load the dataset but only keep the top n words, zero the rest
+    # top_words = 5000
+    top_words = 2
+    (X_train, y_train), (X_test, y_test) = imdb.load_data(num_words=top_words)
+
+    print(len(X_train[5]))
+    print(y_train[6])
+    # print(y_train)
+    return
+    # truncate and pad input sequences
+    max_review_length = 500
+    X_train = sequence.pad_sequences(X_train, maxlen=max_review_length)
+    X_test = sequence.pad_sequences(X_test, maxlen=max_review_length)
+    # create the model
+    embedding_vecor_length = 32
+    model = Sequential()
+    # model.add(Embedding(top_words, embedding_vecor_length, input_dim=max_review_length))
+    model.add(Embedding(2, embedding_vecor_length))
+    model.add(LSTM(2))
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    print(model.summary())
+    model.fit(X_train, y_train, epochs=2, batch_size=2)
+    # Final evaluation of the model
+    scores = model.evaluate(X_test, y_test, verbose=0)
+    Y_test_pred = model.predict(X_test)
+
+    print("Accuracy: %.2f%%" % (scores[1] * 100))
+    print(Y_test_pred)
+
 
 def main():
+    # ex_lstm_class()
+    # return
     train_save_num = 1
     file_save_mod = f'{cwd}/resource/models/model_lstm_{train_save_num}.keras'
     file_save_scal_min_max = f'{cwd}/resource/scalers/scaler_min_max_{train_save_num}'
@@ -599,8 +669,8 @@ def main():
     # modelNN2(data_here[['Close']])
     # print(data_here['2020-04-12'])
     data_here.insert(0, 'Close', data_here.pop('Close'))
-    # data_here = preprocess_1(data_here)
-    data_here = preprocess_2(data_here)
+    data_here = preprocess_1(data_here)
+    # data_here = preprocess_2(data_here)
     # print(data_here['2020-04-12'])
 
     model_nn_1(data_here, file_save_mod, file_save_scal_min_max, file_save_scal_pca)

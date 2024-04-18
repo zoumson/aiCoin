@@ -103,10 +103,10 @@ def modelNN1(dataframe):
     # model.reset_states()
     # test_predict = model.predict(testX, batch_size=batch_size)
     # # invert predictions
-    # train_predict = scaler.inverse_transform(train_predict)
-    # trainY = scaler.inverse_transform([trainY])
-    # test_predict = scaler.inverse_transform(test_predict)
-    # testY = scaler.inverse_transform([testY])
+    # train_predict = scalers.inverse_transform(train_predict)
+    # trainY = scalers.inverse_transform([trainY])
+    # test_predict = scalers.inverse_transform(test_predict)
+    # testY = scalers.inverse_transform([testY])
     # # calculate root mean squared error
     # trainScore = np.sqrt(mean_squared_error(trainY[0], train_predict[:, 0]))
     # print('Train Score: %.2f RMSE' % (trainScore))
@@ -121,7 +121,7 @@ def modelNN1(dataframe):
     # testPredictPlot[:, :] = np.nan
     # testPredictPlot[len(train_predict) + (look_back * 2) + 1:len(dataset) - 1, :] = test_predict
     # # plot baseline and predictions
-    # plt.plot(scaler.inverse_transform(dataset))
+    # plt.plot(scalers.inverse_transform(dataset))
     # plt.plot(trainPredictPlot)
     # plt.plot(testPredictPlot)
     # plt.show()
@@ -522,9 +522,9 @@ def get_hist_bito(_email, _api_secret, _api_key):
     # df_yahoo[['Close']].plot(figsize=(15, 8))
 
     # dff = pd.DataFrame(df[['Close']], df_yahoo[['Close']])
-    # scaler = MinMaxScaler()
-    # scaler = scaler.fit(data2)
-    # data2 = scaler.transform(data2)
+    # scalers = MinMaxScaler()
+    # scalers = scalers.fit(data2)
+    # data2 = scalers.transform(data2)
     # data2 = pd.DataFrame(data2)
     # data2.plot()
     # plt.show()

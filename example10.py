@@ -200,9 +200,9 @@ def get_hist_bito(_email, _api_secret, _api_key):
     # df_yahoo[['Close']].plot(figsize=(15, 8))
 
     # dff = pd.DataFrame(df[['Close']], df_yahoo[['Close']])
-    # scaler = MinMaxScaler()
-    # scaler = scaler.fit(data2)
-    # data2 = scaler.transform(data2)
+    # scalers = MinMaxScaler()
+    # scalers = scalers.fit(data2)
+    # data2 = scalers.transform(data2)
     # data2 = pd.DataFrame(data2)
     # data2.plot()
     # plt.show()
