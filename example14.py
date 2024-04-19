@@ -217,9 +217,6 @@ def preprocess_1(df):
 
 def test_2():
     data_here = get_hist_yahoo()
-    # modelNN1(data_here[['Close']])
-    # modelNN2(data_here[['Close']])
-    # print(data_here['2020-04-12'])
     data_here.insert(0, 'Close', data_here.pop('Close'))
     data_here = preprocess_1(data_here)
     data_here_val = data_here.values
@@ -238,98 +235,52 @@ def test_2():
     data_here_val.drop(data_here_val.columns[col_drop_list],
                        axis=1,
                        inplace=True)
-    # print(data_here_val.head(5))
-    # return
-    # data_proc = data_here_val.head(5).values.astype('float32')
     data_proc = data_here_val.values.astype('float32')
     x = data_proc[:, :-1]
     scaler_min_max_x = MinMaxScaler(feature_range=(0, 1))
     # print(x)
     x = scaler_min_max_x.fit_transform(x)
+    train_ratio = .7
     n_sample = x.shape[0]
+    train_size = int(n_sample * train_ratio)
+    test_size = n_sample - train_size
     x = x.reshape((n_sample, look_back, num_feat))
-    # x = x.reshape((x.shape[0]/2, 2, x.shape[1]))
     y = data_proc[:, -1]
-    # print(x.shape)
-    # print(y.shape)
-    # print(x)
-    # return
+    y = y.reshape((-1, 1))
+
+    x_train, y_train = x[:train_size, :], y[:train_size, :]
+    x_test, y_test = x[train_size:, :], y[train_size:, :]
+    # x0 = x[4, :, :]
+    # x0 = x0.reshape((1, look_back, num_feat))
+    # y0 = y[4]
+
     model = Sequential()
-
-    # reshape from [samples, timesteps] into [samples, subsequences, timesteps, features]
-    x = x.reshape((n_sample, 1, look_back, num_feat))
-    model.add(TimeDistributed(Conv1D(filters=64, kernel_size=1, activation='relu'),
-                              input_shape=(None, look_back, num_feat)))
-    model.add(TimeDistributed(MaxPooling1D(pool_size=2)))
-    model.add(TimeDistributed(Flatten()))
-    # model.add(LSTM(50, activation='tanh', input_shape=(look_back, num_feat)))
-    # model.add(Bidirectional(LSTM(50, activation='tanh', return_sequences=True, input_shape=(look_back, num_feat))))
-    model.add(Bidirectional(LSTM(50, activation='relu', return_sequences=True)))
-
-    # model.add(LSTM(50, activation='relu', return_sequences=True, input_shape=(n_steps, n_features)))
-    model.add(LSTM(50, return_sequences=True, activation='relu'))
-    model.add(LSTM(200, return_sequences=True, activation='relu'))
-    model.add(LSTM(100, return_sequences=True, activation='relu'))
-    model.add(LSTM(20, activation='relu'))
-    # model.add(Dense(1))
+    model.add(LSTM(50, activation='relu', input_shape=(look_back, num_feat), return_sequences=True))
+    model.add(Dropout(.2))
+    model.add(LSTM(10, return_sequences=True, activation='relu'))
+    model.add(Dropout(.4))
+    model.add(LSTM(2, activation='relu'))
+    model.add(Dropout(.1))
     model.add(Dense(1, activation='sigmoid'))
-    # model.compile(optimizer='adam', loss='mse')
     model.compile(loss='binary_crossentropy',
                   optimizer='adam',
-                  metrics=[keras.metrics.Recall()])
+                  metrics=[keras.metrics.BinaryAccuracy(threshold=0.5),
+                           keras.metrics.Recall(thresholds=0.5),
+                           keras.metrics.Precision(thresholds=0.5),
+                           keras.metrics.F1Score(threshold=0.5)])
+    # fit model
+    model.fit(x_train, y_train, epochs=200, verbose=0)
 
-    # # fit model
-    model.fit(x, y, epochs=200, verbose=0)
-    # model.fit(X, y, epochs=200, verbose=0)
-    # # demonstrate prediction
-    x0 = x[4, :, :, :]
-    x0 = x0.reshape((1, 1, look_back, num_feat))
-    y0 = y[4]
-    # x_input = array(x1)
-    # x_input = x_input.reshape((1, n_steps, n_features))
-    # x_input = x_input.reshape((1, 3, 2))
-    score = model.evaluate(x, y, verbose=0)
-    print('Test score:', score)
-    # print('Test accuracy:', acc)
-    # yhat = model.predict(x_input, verbose=0)
+    # evaluate model
+    score = model.evaluate(x_test, y_test, verbose=0)
     # y0_pred = model.predict(x0, verbose=0)
-    y_pred = model.predict(x, verbose=0)
-    y_pred = array(y_pred.reshape(len(y_pred), 1))
-    # y0_pred = np.where(y0_pred > 0.5, 1, 0)
-
-    m = keras.metrics.Recall()
-    m.update_state(y, y_pred)
-    r1 = m.result().numpy()
-    print(r1)
-    # fp = keras.metrics.FalsePositives()
-    # fp.update_state(y, y_pred)
-    # fp = fp.result().numpy()
-    #
-    # fn = keras.metrics.FalseNegatives()
-    # fn.update_state(y, y_pred)
-    # fn = fn.result().numpy()
-    #
-    # tn = keras.metrics.TrueNegatives()
-    # tn.update_state(y, y_pred)
-    # tn = tn.result().numpy()
-    #
-    # # Find false positive rate.
-    # fpr = fp / (fp + tn)
-    # print(fp)
-    # print(fn)
-    # print(fpr)
-    # y_all = np.concatenate((y0_pred, y0), axis=1)
-    # print(y0_pred)
-    # print(y0)
-    # print(yhat)
-    # Test
-    # score: 0.012656545266509056
-    # [[-0.02989097]]
-    # 0.11975886
-    # Test score: 1.8984026156632083e-11
-    # 0.0051596206612885
-    # 0.005135000683367252
-    # Test score: 0.005123339127749205
+    y_pred = model.predict(x_test, verbose=0)
+    y_test = y_test.reshape(len(array(y_test)), 1)
+    y_pred = y_pred.reshape(len(array(y_pred)), 1)
+    y_pred = 1*np.array(tf.greater(y_pred, .5))
+    y_result = np.concatenate((y_pred, y_test), axis=1)
+    print('Test score:', score)
+    print(y_result)
 
 
 def main():
