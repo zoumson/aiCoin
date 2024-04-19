@@ -60,6 +60,8 @@ from keras.layers import Conv1D
 from keras.layers import MaxPooling1D
 import tensorflow as tf
 
+cwd = os.getcwd()
+
 
 def test_1():
     # tf.random.set_seed(7)
@@ -215,7 +217,7 @@ def preprocess_1(df):
     return df_cpy
 
 
-def test_2():
+def train_class():
     data_here = get_hist_yahoo()
     data_here.insert(0, 'Close', data_here.pop('Close'))
     data_here = preprocess_1(data_here)
@@ -255,36 +257,134 @@ def test_2():
     # y0 = y[4]
 
     model = Sequential()
-    model.add(LSTM(50, activation='relu', input_shape=(look_back, num_feat), return_sequences=True))
+    model.add(LSTM(50, activation=keras.activations.relu,
+                   input_shape=(look_back, num_feat),
+                   return_sequences=True))
     model.add(Dropout(.2))
-    model.add(LSTM(10, return_sequences=True, activation='relu'))
+    model.add(LSTM(10, return_sequences=True,
+                   activation=keras.activations.relu))
     model.add(Dropout(.4))
-    model.add(LSTM(2, activation='relu'))
+    model.add(LSTM(2, activation=keras.activations.relu))
     model.add(Dropout(.1))
-    model.add(Dense(1, activation='sigmoid'))
-    model.compile(loss='binary_crossentropy',
-                  optimizer='adam',
+    model.add(Dense(1, activation=keras.activations.sigmoid))
+
+    model.compile(loss=keras.losses.BinaryCrossentropy(),
+                  optimizer=keras.optimizers.Adam(learning_rate=0.002, epsilon=1e-07),
                   metrics=[keras.metrics.BinaryAccuracy(threshold=0.5),
                            keras.metrics.Recall(thresholds=0.5),
                            keras.metrics.Precision(thresholds=0.5),
                            keras.metrics.F1Score(threshold=0.5)])
     # fit model
-    model.fit(x_train, y_train, epochs=200, verbose=0)
+    # model.fit(x_train, y_train, batch_size=20, epochs=5, validation_split=.3, verbose=0)
+    history = model.fit(x, y, batch_size=20, epochs=40, validation_split=.3, verbose=0)
 
     # evaluate model
-    score = model.evaluate(x_test, y_test, verbose=0)
+    # score = model.evaluate(x_test, y_test, batch_size=20, verbose=1)
     # y0_pred = model.predict(x0, verbose=0)
     y_pred = model.predict(x_test, verbose=0)
     y_test = y_test.reshape(len(array(y_test)), 1)
     y_pred = y_pred.reshape(len(array(y_pred)), 1)
-    y_pred = 1*np.array(tf.greater(y_pred, .5))
+    y_pred = 1 * np.array(tf.greater(y_pred, .5))
     y_result = np.concatenate((y_pred, y_test), axis=1)
-    print('Test score:', score)
-    print(y_result)
+
+    train_save_num = 1
+    file_name_save_model = f'{cwd}/resource/models/model_class_lstm_{train_save_num}.keras'
+    model.save(file_name_save_model)
+
+    file_name_save_scaler_min_max = f'{cwd}/resource/scalers/scaler_class_min_max_{train_save_num}.pkl'
+
+    with open(file_name_save_scaler_min_max, 'wb') as f:
+        pickle.dump(scaler_min_max_x, f)
+
+    # print('Test score:', score)
+    # print(y_result)
+    f_score_test = array(history.history['val_f1_score'])
+    f_score_train = array(history.history['f1_score'])
+
+    loss_test = array(history.history['val_loss'])
+    loss_train = array(history.history['loss'])
+
+    loss_test = array(history.history['val_loss'])
+    loss_train = array(history.history['loss'])
+
+    binary_accuracy_test = array(history.history['val_binary_accuracy'])
+    binary_accuracy_train = array(history.history['binary_accuracy'])
+
+    precision_test = array(history.history['val_precision'])
+    precision_train = array(history.history['precision'])
+
+    recall_test = array(history.history['val_recall'])
+    recall_train = array(history.history['recall'])
+
+    # plot history
+    pyplot.plot(precision_train, label='train')
+    pyplot.plot(precision_test, label='test')
+    pyplot.legend()
+    pyplot.show()
+    # print(history.history['val_f1_score'])
+
+
+def predict_class(x0):
+    train_save_num = 1
+    file_name_save_model = f'{cwd}/resource/models/model_class_lstm_{train_save_num}.keras'
+    # model.save(file_name_save_model)
+    model = load_model(file_name_save_model)
+
+    file_name_save_scaler_min_max = f'{cwd}/resource/scalers/scaler_class_min_max_{train_save_num}.pkl'
+
+    with open(file_name_save_scaler_min_max, 'rb') as f:
+        scaler_min_max_x = pickle.load(f)
+
+    x0 = scaler_min_max_x.transform(x0.reshape(1, len(x0)))
+
+    look_back = 2
+    num_feat = 5
+    x0 = x0.reshape((1, look_back, num_feat))
+    y0 = model.predict(x0, verbose=0)
+    y0 = y0.reshape(len(array(y0)), 1)
+    y0 = y0.reshape(len(array(y0)), 1)
+    y0 = 1 * np.array(tf.greater(y0, .5))
+    # y_result = np.concatenate((y_pred, y_test), axis=1)
+    return y0
+
+
+def get_x0_y0(idx):
+    data_here = get_hist_yahoo()
+    data_here.insert(0, 'Close', data_here.pop('Close'))
+    data_here = preprocess_1(data_here)
+    data_here_val = data_here.values
+    # ensure all data is float
+    data_here_val = data_here_val.astype('float32')
+    num_feat = 5
+
+    # frame as supervised learning
+    look_back = 2
+    data_here_val = series_to_supervised(data_here_val, look_back, 1)
+    col_drop_list = []
+    for col_drop in range(num_feat * look_back + 1, num_feat * (look_back + 1), 1):
+        if col_drop % num_feat != 0:
+            col_drop_list.append(col_drop)
+
+    data_here_val.drop(data_here_val.columns[col_drop_list],
+                       axis=1,
+                       inplace=True)
+    data_proc = data_here_val.values.astype('float32')
+    return data_proc[idx, :]
+    # x = data_proc[:, :-1]
 
 
 def main():
-    test_2()
+    # train_class()
+    idx = 30
+    x_data = get_x0_y0(idx)
+    x0 = x_data[:-1]
+    y0 = x_data[-1]
+    y0_pred = predict_class(x0)
+    # y0_result = np.concatenate((y0_pred, y0), axis=1)
+    # y0_result = np.concatenate((y0_pred, y0), axis=1)
+    # print(y0_result)
+    print(y0_pred)
+    print(y0)
 
 
 if __name__ == "__main__":
