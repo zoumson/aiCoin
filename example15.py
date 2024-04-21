@@ -59,17 +59,21 @@ from keras.layers import TimeDistributed
 from keras.layers import Conv1D
 from keras.layers import MaxPooling1D
 import tensorflow as tf
+from datetime import date
 
 from backtesting import Backtest, Strategy
 
 cwd = os.getcwd()
 
 
-def get_hist_yahoo():
-    ticker = 'SOL-USD'
-    start_dt = '2020-01-01'
-    end_dt = '2024-04-01'
-    data_frame = yf.download(tickers=ticker, start=start_dt, prepost=True, progress=False)
+def get_hist_yahoo(ticker='SOL-USD', start_dt='2020-01-01', end_dt=None):
+    # ticker = 'SOL-USD'
+    # start_dt = '2020-01-01'
+    # end_dt = '2024-04-01'
+    if end_dt is None:
+        end_dt = str(date.today())
+
+    data_frame = yf.download(tickers=ticker, start=start_dt, end=end_dt, prepost=True, progress=False)
     data_frame = data_frame.drop(columns='Adj Close')
     return data_frame
 
@@ -96,10 +100,35 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     # drop rows with NaN values
     if dropnan:
         agg.dropna(inplace=True)
-    return agg# convert series to supervised learning
+    return agg  # convert series to supervised learning
+
+
 def series_to_supervised_2(data, n_in=1, n_out=1, dropnan=True):
     n_vars = 1 if type(data) is list else data.shape[1]
-    # df = DataFrame(data)
+    df = data
+    cols, names = list(), list()
+    # input sequence (t-n, ... t-1)
+    for i in range(n_in, 0, -1):
+        cols.append(df.shift(i))
+        names += [('var%d(t-%d)' % (j + 1, i)) for j in range(n_vars)]
+    # forecast sequence (t, t+1, ... t+n)
+    for i in range(0, n_out):
+        cols.append(df.shift(-i))
+        if i == 0:
+            names += [('var%d(t)' % (j + 1)) for j in range(n_vars)]
+        else:
+            names += [('var%d(t+%d)' % (j + 1, i)) for j in range(n_vars)]
+    # put it all together
+    agg = concat(cols, axis=1)
+    agg.columns = names
+    # drop rows with NaN values
+    if dropnan:
+        agg.dropna(inplace=True)
+    return agg
+
+
+def map_past_timestamp_to_target(data, n_in=1, n_out=1, dropnan=True):
+    n_vars = 1 if type(data) is list else data.shape[1]
     df = data
     cols, names = list(), list()
     # input sequence (t-n, ... t-1)
@@ -148,6 +177,21 @@ def preprocess_1(df):
     # print(df.index)
     # print(df.loc[['2020-04-10']])
     return df_cpy
+
+
+def append_binary_target(df):
+    """
+    Create the target variable
+    """
+    df['Change'] = df['Close'].pct_change(-1)
+    df.Change = df.Change * -1
+    df.Change = np.where(df.Change > 0, 1, 0)
+    df.insert(0, 'Change', df.pop('Change'))
+    df_cpy = df.dropna().copy()
+
+    return df_cpy
+
+
 def preprocess_2(df):
     """
     Create the target variable
@@ -172,7 +216,56 @@ def preprocess_2(df):
     return df_cpy
 
 
+class SimpleClassificationUD(Strategy):
+    def __init__(self, broker, data, params):
+        super().__init__(broker, data, params)
+        self.model_train_save_num = None
+        self.model_file = None
+        self.scaler = None
+        self.already_bought = None
+        self.model = None
+
+    def init(self):
+        self.model_train_save_num = 1
+        self.model_file = f'{cwd}/resource/models/model_class_lstm_{self.model_train_save_num}.keras'
+        self.model = load_model(self.model_file)
+        save_scaler_min_max_file = f'{cwd}/resource/scalers/scaler_class_min_max_{self.model_train_save_num}.pkl'
+
+        with open(save_scaler_min_max_file, 'rb') as f:
+            self.scaler = pickle.load(f)
+        self.already_bought = False
+
+    def next(self):
+        y_t = .4
+        num_next_days = 1
+        look_back = 2
+        num_feat = 6
+        df_explanatory = self.data.df.values[-1, 6:-1]
+        df_explanatory = self.scaler.transform(df_explanatory.reshape(1, len(df_explanatory)))
+        n_sample = df_explanatory.shape[0]
+        explanatory_today = df_explanatory.reshape((n_sample, look_back, num_feat))
+        forecast_tomorrow = self.model.predict(explanatory_today, verbose=0)
+        forecast_tomorrow = forecast_tomorrow.reshape(len(array(forecast_tomorrow)), 1)
+        forecast_tomorrow = forecast_tomorrow.reshape(len(array(forecast_tomorrow)), 1)
+        forecast_tomorrow = 1 * np.array(tf.greater(forecast_tomorrow, y_t))
+        print(forecast_tomorrow)
+        forecast_tomorrow = forecast_tomorrow.flatten()
+        forecast_tomorrow = forecast_tomorrow[0]
+        print(forecast_tomorrow)
+
+        # conditions to sell or buy
+        if forecast_tomorrow == 1 and self.already_bought is False:
+            self.buy()
+            self.already_bought = True
+        elif forecast_tomorrow == 0 and self.already_bought is True:
+            self.sell()
+            self.already_bought = False
+        else:
+            pass
+
+
 def train_class():
+    y_t = .4
     data_here = get_hist_yahoo()
     df_explanatory = data_here
 
@@ -202,8 +295,8 @@ def train_class():
                        axis=1,
                        inplace=True)
     df_explanatory_2.drop(df_explanatory_2.columns[col_drop_list],
-                       axis=1,
-                       inplace=True)
+                          axis=1,
+                          inplace=True)
 
     # print(df_explanatory_2.head(5))
     # print(data_here_val.head(5))
@@ -256,23 +349,23 @@ def train_class():
     model.add(LSTM(50, activation=keras.activations.relu,
                    input_shape=(look_back, num_feat),
                    return_sequences=True))
-    model.add(Dropout(.2))
-    model.add(LSTM(10, return_sequences=True,
-                   activation=keras.activations.relu))
-    model.add(Dropout(.4))
-    model.add(LSTM(2, activation=keras.activations.relu))
     model.add(Dropout(.1))
+    # model.add(LSTM(5, return_sequences=True,
+    #                activation=keras.activations.relu))
+    # model.add(Dropout(.4))
+    model.add(LSTM(2, activation=keras.activations.relu))
+    model.add(Dropout(.2))
     model.add(Dense(1, activation=keras.activations.sigmoid))
 
     model.compile(loss=keras.losses.BinaryCrossentropy(),
-                  optimizer=keras.optimizers.Adam(learning_rate=0.002, epsilon=1e-07),
-                  metrics=[keras.metrics.BinaryAccuracy(threshold=0.5),
-                           keras.metrics.Recall(thresholds=0.5),
-                           keras.metrics.Precision(thresholds=0.5),
-                           keras.metrics.F1Score(threshold=0.5)])
+                  optimizer=keras.optimizers.Adam(learning_rate=0.001, epsilon=1e-07),
+                  metrics=[keras.metrics.BinaryAccuracy(threshold=y_t),
+                           keras.metrics.Recall(thresholds=y_t),
+                           keras.metrics.Precision(thresholds=y_t),
+                           keras.metrics.F1Score(threshold=y_t)])
     # fit model
     # model.fit(x_train, y_train, batch_size=20, epochs=5, validation_split=.3, verbose=0)
-    history = model.fit(x, y, batch_size=20, epochs=40, validation_split=.3, verbose=0)
+    history = model.fit(x, y, batch_size=20, epochs=200, validation_split=.3, verbose=0)
 
     # evaluate model
     # score = model.evaluate(x_test, y_test, batch_size=20, verbose=1)
@@ -280,7 +373,7 @@ def train_class():
     y_pred = model.predict(x_test, verbose=0)
     y_test = y_test.reshape(len(array(y_test)), 1)
     y_pred = y_pred.reshape(len(array(y_pred)), 1)
-    y_pred = 1 * np.array(tf.greater(y_pred, .5))
+    y_pred = 1 * np.array(tf.greater(y_pred, y_t))
     y_result = np.concatenate((y_pred, y_test), axis=1)
 
     train_save_num = 1
@@ -313,82 +406,17 @@ def train_class():
     recall_train = array(history.history['recall'])
 
     # plot history
-    pyplot.plot(precision_train, label='train')
-    pyplot.plot(precision_test, label='test')
+    pyplot.plot(precision_train, label='train p')
+    pyplot.plot(precision_test, label='test p')
+
+    pyplot.plot(recall_train, label='train r')
+    pyplot.plot(recall_test, label='test r')
+
+    pyplot.plot(f_score_train, label='train f')
+    pyplot.plot(f_score_test, label='test f')
     pyplot.legend()
     pyplot.show()
 
-    class SimpleClassificationUD(Strategy):
-        def __init__(self, broker, data, params):
-            super().__init__(broker, data, params)
-            self.already_bought = None
-            self.model = None
-
-        def init(self):
-            self.model = model
-            self.scaler = scaler_min_max_x
-            self.already_bought = False
-
-        def next(self):
-            # print(self.data.df.size)
-            look_back = 2
-            num_feat = 6
-            # # data_here = self.data.df
-            # data_here = self.data
-            # print(data_here)
-            # data_here.insert(0, 'Close', data_here.pop('Close'))
-            # data_here = preprocess_1(data_here)
-            # data_here_val = data_here.values
-            # # ensure all data is float
-            # data_here_val = data_here_val.astype('float32')
-            # num_feat = 5
-            #
-            # # frame as supervised learning
-            # look_back = 2
-            # data_here_val = series_to_supervised(data_here_val, look_back, 1)
-            # col_drop_list = []
-            # for col_drop in range(num_feat * look_back + 1, num_feat * (look_back + 1), 1):
-            #     if col_drop % num_feat != 0:
-            #         col_drop_list.append(col_drop)
-            #
-            # data_here_val.drop(data_here_val.columns[col_drop_list],
-            #                    axis=1,
-            #                    inplace=True)
-            df_explanatory = self.data.df.values[-1, 6:-1]
-            # # df_explanatory = data_here_val.iloc[[:, 1]]
-            # # data_proc = data_here_val.values.asty.tail(1)
-            # data_proc = data_here_val
-            # data_proc = data_proc.values.astype('float32')
-            # x = data_proc[-1, :-1]
-            # scaler_min_max_x = MinMaxScaler(feature_range=(0, 1))
-            # # print(x)
-            # # x = scaler_min_max_x.fit_transform(x)
-            df_explanatory = self.scaler.transform(df_explanatory.reshape(1, len(df_explanatory)))
-            # # train_ratio = .7
-            n_sample = df_explanatory.shape[0]
-            #
-            explanatory_today = df_explanatory.reshape((n_sample, look_back, num_feat))
-            #
-            forecast_tomorrow = self.model.predict(explanatory_today, verbose=0)
-            forecast_tomorrow = forecast_tomorrow.reshape(len(array(forecast_tomorrow)), 1)
-            forecast_tomorrow = forecast_tomorrow.reshape(len(array(forecast_tomorrow)), 1)
-            forecast_tomorrow = 1 * np.array(tf.greater(forecast_tomorrow, .5))
-            forecast_tomorrow = forecast_tomorrow[0]
-            # # explanatory_today = self.data.df.iloc[-1:, :]
-            # forecast_tomorrow = self.model.predict(explanatory_today)[0]
-            # forecast_tomorrow = 1
-
-            # conditions to sell or buy
-            if forecast_tomorrow == 1 and self.already_bought == False:
-                self.buy()
-                self.already_bought = True
-            elif forecast_tomorrow == 0 and self.already_bought == True:
-                self.sell()
-                self.already_bought = False
-            else:
-                pass
-
-    # df_explanatory = df[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
     bt = Backtest(df_explanatory_3, SimpleClassificationUD,
                   cash=10000, commission=.002, exclusive_orders=True)
     results = bt.run()
@@ -444,8 +472,92 @@ def get_x0_y0(idx):
     # x = data_proc[:, :-1]
 
 
+def extract_data(ticker='SOL-USD', start_dt='2020-01-01', end_dt=None):
+    return get_hist_yahoo(ticker='SOL-USD', start_dt='2020-01-01', end_dt=None)
+
+
+def process_data(extracted_data, n_pst_dys=1, n_nxt_dys=1):
+    data_with_target = append_binary_target(extracted_data)
+    num_feat = data_with_target.shape[1]
+    data_with_target_extended = map_past_timestamp_to_target(data_with_target, n_pst_dys, n_nxt_dys)
+    col_drop_list = []
+    for col_drop in range(num_feat * n_pst_dys + n_nxt_dys, num_feat * (n_pst_dys + n_nxt_dys), 1):
+        if col_drop % num_feat != 0:
+            col_drop_list.append(col_drop)
+
+    data_with_target_extended.drop(data_with_target_extended.columns[col_drop_list],
+                                   axis=1,
+                                   inplace=True)
+
+    df_train = data_with_target.loc[data_with_target_extended.index]
+    df_backtest = pd.concat([df_train, data_with_target_extended], axis=1)
+
+    return df_backtest
+
+
+def preprocess_x(data_x, train_save_num=1):
+    scaler_min_max_x = MinMaxScaler(feature_range=(0, 1))
+    data_x_out = scaler_min_max_x.fit_transform(data_x)
+    file_name_save_scaler_min_max = f'{cwd}/resource/scalers/scaler_class_min_max_{train_save_num}.pkl'
+    with open(file_name_save_scaler_min_max, 'wb') as f:
+        pickle.dump(scaler_min_max_x, f)
+    return data_x_out
+
+
+def train_data(data_train, test_ratio=.3, y_t=.4, num_feat=6, n_pst_dys=1, n_nxt_dys=1):
+
+    # data_train_val = data_train.iloc[:, num_feat:-n_nxt_dys].values.astype('float32')
+    # data_train_val = data_train.iloc[:, num_feat:-n_nxt_dys]
+    x = data_train.iloc[:, num_feat:-n_nxt_dys].values.astype('float32')
+    x_prep = preprocess_x(x)
+
+    n_sample = x.shape[0]
+    n_timestamp_with_feat = x.shape[1]
+    x_prep = x_prep.reshape((n_sample, n_pst_dys, num_feat))
+    # fix next time  for multivariate prediction
+    y = data_train.iloc[:, -n_nxt_dys:].values.astype('float32')
+    # as uni-variate is not 2d data transform required for lstm
+    if n_nxt_dys == 1:
+        y = y.reshape((-1, 1))
+
+    model = Sequential()
+    model.add(LSTM(50, activation=keras.activations.relu,
+                   input_shape=(n_pst_dys, num_feat),
+                   return_sequences=True))
+    model.add(Dropout(.1))
+    model.add(LSTM(2, activation=keras.activations.relu))
+    model.add(Dropout(.2))
+    model.add(Dense(1, activation=keras.activations.sigmoid))
+
+    model.compile(loss=keras.losses.BinaryCrossentropy(),
+                  optimizer=keras.optimizers.Adam(learning_rate=0.001, epsilon=1e-07),
+                  metrics=[keras.metrics.BinaryAccuracy(threshold=y_t),
+                           keras.metrics.Recall(thresholds=y_t),
+                           keras.metrics.Precision(thresholds=y_t),
+                           keras.metrics.F1Score(threshold=y_t)])
+
+    history = model.fit(x_prep, y, batch_size=20, epochs=200, validation_split=test_ratio, verbose=1)
+
+    train_save_num = 1
+    file_name_save_model = f'{cwd}/resource/models/model_class_lstm_{train_save_num}.keras'
+    model.save(file_name_save_model)
+    return history.history
+
+def back_test(data_test, money=10000):
+    test_engine = Backtest(data_test, SimpleClassificationUD,
+                           cash=money, commission=.002, exclusive_orders=True)
+    test_history = test_engine.run()
+    return test_history.to_frame(name='Values').loc[:'Return [%]']
+
 def main():
-    train_class()
+    start_date = '2020-01-01'
+    extracted_data = extract_data(start_dt=start_date)
+    n_past_days = 2
+    data_extended = process_data(extracted_data, n_pst_dys=n_past_days)
+    train_history = train_data(data_extended, n_pst_dys=n_past_days)
+    invest_money = 10000
+    test_history = back_test(data_extended, money=invest_money)
+    print(test_history)
     # idx = 30
     # x_data = get_x0_y0(idx)
     # x0 = x_data[:-1]
