@@ -59,7 +59,9 @@ from keras.layers import TimeDistributed
 from keras.layers import Conv1D
 from keras.layers import MaxPooling1D
 import tensorflow as tf
-from datetime import date
+
+import datetime
+# from datetime import date
 
 from backtesting import Backtest, Strategy
 
@@ -71,7 +73,7 @@ def get_hist_yahoo(ticker='SOL-USD', start_dt='2020-01-01', end_dt=None):
     # start_dt = '2020-01-01'
     # end_dt = '2024-04-01'
     if end_dt is None:
-        end_dt = str(date.today())
+        end_dt = str(datetime.date.today())
 
     data_frame = yf.download(tickers=ticker, start=start_dt, end=end_dt, prepost=True, progress=False)
     data_frame = data_frame.drop(columns='Adj Close')
@@ -472,11 +474,47 @@ def get_x0_y0(idx):
     # x = data_proc[:, :-1]
 
 
-def extract_data(ticker='SOL-USD', start_dt='2020-01-01', end_dt=None):
-    return get_hist_yahoo(ticker='SOL-USD', start_dt='2020-01-01', end_dt=None)
+def extract_data(ticker='SOL-USD', start_dtt='2020-01-01', end_dtt=None, train_save_num=1):
+    if end_dtt is None:
+        end_dtt = str(datetime.date.today())
+    data_used = get_hist_yahoo(ticker='SOL-USD', start_dt=start_dtt, end_dt=end_dtt)
+
+    start_dtt = datetime.datetime.strptime(start_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    end_dtt = datetime.datetime.strptime(end_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+
+    ticker = ticker.replace("-", "_").lower()
+    file_data = f'{cwd}/resource/data/raw/data_raw_ti_{ticker}_st_{start_dtt}_ed_{end_dtt}_n_{train_save_num}.csv'
+    data_used.to_csv(file_data)
+
+    return data_used
 
 
-def process_data(extracted_data, n_pst_dys=1, n_nxt_dys=1):
+def load_data(ticker='SOL-USD', start_dtt='2020-01-01', end_dtt=None, train_save_num=1):
+    if end_dtt is None:
+        end_dtt = str(datetime.date.today())
+
+    start_dtt = datetime.datetime.strptime(start_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    end_dtt = datetime.datetime.strptime(end_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    ticker = ticker.replace("-", "_").lower()
+    file_data = f'{cwd}/resource/data/raw/data_raw_ti_{ticker}_st_{start_dtt}_ed_{end_dtt}_n_{train_save_num}.csv'
+    data_retrieved = pd.read_csv(file_data, parse_dates=['Date'], index_col=0)
+    return data_retrieved
+
+
+def load_data_extended(ticker='SOL-USD', start_dtt='2020-01-01', end_dtt=None, train_save_num=1):
+    if end_dtt is None:
+        end_dtt = str(datetime.date.today())
+
+    start_dtt = datetime.datetime.strptime(start_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    end_dtt = datetime.datetime.strptime(end_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    ticker = ticker.replace("-", "_").lower()
+    file_data = f'{cwd}/resource/data/processed/data_proc_ti_{ticker}_st_{start_dtt}_ed_{end_dtt}_n_{train_save_num}.csv'
+    data_retrieved = pd.read_csv(file_data, parse_dates=['Date'], index_col=0)
+    return data_retrieved
+
+
+def process_data(extracted_data, n_pst_dys=1, n_nxt_dys=1, ticker='SOL-USD', start_dtt='2020-01-01', end_dtt=None,
+                 train_save_num=1):
     data_with_target = append_binary_target(extracted_data)
     num_feat = data_with_target.shape[1]
     data_with_target_extended = map_past_timestamp_to_target(data_with_target, n_pst_dys, n_nxt_dys)
@@ -492,6 +530,15 @@ def process_data(extracted_data, n_pst_dys=1, n_nxt_dys=1):
     df_train = data_with_target.loc[data_with_target_extended.index]
     df_backtest = pd.concat([df_train, data_with_target_extended], axis=1)
 
+    if end_dtt is None:
+        end_dtt = str(datetime.date.today())
+    start_dtt = datetime.datetime.strptime(start_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    end_dtt = datetime.datetime.strptime(end_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+
+    ticker = ticker.replace("-", "_").lower()
+    file_data = f'{cwd}/resource/data/processed/data_proc_ti_{ticker}_st_{start_dtt}_ed_{end_dtt}_n_{train_save_num}.csv'
+    df_backtest.to_csv(file_data)
+
     return df_backtest
 
 
@@ -504,10 +551,8 @@ def preprocess_x(data_x, train_save_num=1):
     return data_x_out
 
 
-def train_data(data_train, test_ratio=.3, y_t=.4, num_feat=6, n_pst_dys=1, n_nxt_dys=1):
-
-    # data_train_val = data_train.iloc[:, num_feat:-n_nxt_dys].values.astype('float32')
-    # data_train_val = data_train.iloc[:, num_feat:-n_nxt_dys]
+def train_data(data_train, test_ratio=.3, y_t=.4, num_feat=6, n_pst_dys=1, n_nxt_dys=1,
+               ticker='SOL-USD', start_dtt='2020-01-01', end_dtt=None, train_save_num=1):
     x = data_train.iloc[:, num_feat:-n_nxt_dys].values.astype('float32')
     x_prep = preprocess_x(x)
 
@@ -541,23 +586,59 @@ def train_data(data_train, test_ratio=.3, y_t=.4, num_feat=6, n_pst_dys=1, n_nxt
     train_save_num = 1
     file_name_save_model = f'{cwd}/resource/models/model_class_lstm_{train_save_num}.keras'
     model.save(file_name_save_model)
+
+    if end_dtt is None:
+        end_dtt = str(datetime.date.today())
+
+    start_dtt = datetime.datetime.strptime(start_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    end_dtt = datetime.datetime.strptime(end_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    ticker = ticker.replace("-", "_").lower()
+
+    # file_history = f'{cwd}/resource/reports/histories/{0}/hist_ti_{ticker}_st_{start_dtt}_ed_{end_dtt}_n_{
+    # train_save_num}{1} '
+    file_history = '{0}/resource/reports/histories/train/{1}/hist_train_ti_{2}_st_{3}_ed_{4}_n_{5}{6} '
+    pd.DataFrame(history.history).to_csv(
+        file_history.format(cwd, 'csv', ticker, start_dtt, end_dtt, train_save_num, '.csv'))
+    with open(file_history.format(cwd, 'pkl', ticker, start_dtt, end_dtt, train_save_num, '.pkl'), 'wb') as f:
+        pickle.dump(history.history, f)
     return history.history
 
-def back_test(data_test, money=10000):
+
+def back_test(data_test, money=10000, ticker='SOL-USD', start_dtt='2020-01-01', end_dtt=None, train_save_num=1):
     test_engine = Backtest(data_test, SimpleClassificationUD,
                            cash=money, commission=.002, exclusive_orders=True)
     test_history = test_engine.run()
-    return test_history.to_frame(name='Values').loc[:'Return [%]']
+    test_history = test_history.to_frame(name='Values').loc[:'Return [%]']
+    test_history = test_history.to_frame(name='Values').loc[:'Return [%]']
+    if end_dtt is None:
+        end_dtt = str(datetime.date.today())
+
+    start_dtt = datetime.datetime.strptime(start_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+    end_dtt = datetime.datetime.strptime(end_dtt, '%Y-%m-%d').strftime('%y_%m_%d')
+
+    ticker = ticker.replace("-", "_").lower()
+    file_hist = f'{cwd}/resource/reports/histories/test/data_hist_test_ti_{ticker}_st_{start_dtt}_ed_{end_dtt}_n_{train_save_num}.csv'
+    test_history.to_csv(file_hist)
+
+    return test_history
+
 
 def main():
     start_date = '2020-01-01'
-    extracted_data = extract_data(start_dt=start_date)
+    # extracted_data = extract_data(start_dtt=start_date)
+    # loaded_data = load_data(start_dtt=start_date)
+    # print(loaded_data)
     n_past_days = 2
-    data_extended = process_data(extracted_data, n_pst_dys=n_past_days)
-    train_history = train_data(data_extended, n_pst_dys=n_past_days)
+    # data_extended = process_data(extracted_data, n_pst_dys=n_past_days)
+    # data_extended = process_data(loaded_data, n_pst_dys=n_past_days)
+    loaded_data_extended = load_data_extended(start_dtt=start_date)
+    # print(loaded_data_extended)
+    # train_history = train_data(data_extended, n_pst_dys=n_past_days)
+    # train_history = train_data(loaded_data_extended, n_pst_dys=n_past_days)
     invest_money = 10000
-    test_history = back_test(data_extended, money=invest_money)
-    print(test_history)
+    # test_history = back_test(data_extended, money=invest_money)
+    test_history = back_test(loaded_data_extended, money=invest_money)
+    # print(test_history)
     # idx = 30
     # x_data = get_x0_y0(idx)
     # x0 = x_data[:-1]
