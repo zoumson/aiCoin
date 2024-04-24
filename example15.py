@@ -68,6 +68,11 @@ import re
 
 cwd = os.getcwd()
 
+global_model_train_save_num = 1
+global_next_dys = 1
+global_past_dys = 3
+global_y_threshold = .4
+global_num_feature = 6
 
 def get_hist_yahoo(ticker='SOL-USD', start_dt='2020-01-01', end_dt=None):
     # ticker = 'SOL-USD'
@@ -222,6 +227,10 @@ def preprocess_2(df):
 class SimpleClassificationUD(Strategy):
     def __init__(self, broker, data, params):
         super().__init__(broker, data, params)
+        self.y_t = None
+        self.n_nxt_dys = None
+        self.num_feat = None
+        self.n_pst_dys = None
         self.model_train_save_num = None
         self.model_file = None
         self.scaler = None
@@ -229,8 +238,12 @@ class SimpleClassificationUD(Strategy):
         self.model = None
 
     def init(self):
-        self.model_train_save_num = 1
-        self.model_file = f'{cwd}/resource/models/model_class_lstm_{self.model_train_save_num}.keras'
+        self.model_train_save_num = global_model_train_save_num
+        self.y_t = global_y_threshold
+        self.n_nxt_dys = global_next_dys
+        self.n_pst_dys = global_past_dys
+        self.num_feat = global_num_feature
+        self.model_file = f'{cwd}/resource/models/compiled/model_class_lstm_{self.model_train_save_num}.keras'
         self.model = load_model(self.model_file)
         save_scaler_min_max_file = f'{cwd}/resource/scalers/scaler_class_min_max_{self.model_train_save_num}.pkl'
 
@@ -239,32 +252,25 @@ class SimpleClassificationUD(Strategy):
         self.already_bought = False
 
     def next(self):
-        y_t = .4
-        num_next_days = 1
-        look_back = 2
-        num_feat = 6
-        df_explanatory = self.data.df.values[-1, 6:-1]
-        df_explanatory = self.scaler.transform(df_explanatory.reshape(1, len(df_explanatory)))
-        n_sample = df_explanatory.shape[0]
-        explanatory_today = df_explanatory.reshape((n_sample, look_back, num_feat))
-        forecast_tomorrow = self.model.predict(explanatory_today, verbose=0)
-        forecast_tomorrow = forecast_tomorrow.reshape(len(array(forecast_tomorrow)), 1)
-        forecast_tomorrow = forecast_tomorrow.reshape(len(array(forecast_tomorrow)), 1)
-        forecast_tomorrow = 1 * np.array(tf.greater(forecast_tomorrow, y_t))
-        print(forecast_tomorrow)
-        forecast_tomorrow = forecast_tomorrow.flatten()
-        forecast_tomorrow = forecast_tomorrow[0]
-        print(forecast_tomorrow)
 
-        # conditions to sell or buy
-        if forecast_tomorrow == 1 and self.already_bought is False:
-            self.buy()
-            self.already_bought = True
-        elif forecast_tomorrow == 0 and self.already_bought is True:
-            self.sell()
-            self.already_bought = False
-        else:
-            pass
+        df_explanatory = self.data.df.iloc[-1:, self.num_feat:-self.n_nxt_dys].values.astype('float32')
+        df_explanatory = self.scaler.transform(df_explanatory)
+        n_sample = df_explanatory.shape[0]
+        explanatory_today = df_explanatory.reshape((n_sample, self.n_pst_dys, self.num_feat))
+        forecast_tomorrow = self.model.predict(explanatory_today, verbose=0)
+        forecast_tomorrow = 1 * np.array(tf.greater(forecast_tomorrow, self.y_t))
+        forecast_tomorrow = forecast_tomorrow.flatten()
+
+        for dy in range(self.n_nxt_dys):
+            if forecast_tomorrow[dy] == 1 and self.already_bought is False:
+                self.buy()
+                self.already_bought = True
+            elif forecast_tomorrow[dy] == 0 and self.already_bought is True:
+                self.sell()
+                self.already_bought = False
+            else:
+                pass
+
 
 def predict_class(x0):
     train_save_num = 1
@@ -360,9 +366,13 @@ def process_data(extracted_data, n_pst_dys=1, n_nxt_dys=1, ticker='SOL-USD', sta
     num_feat = data_with_target.shape[1]
     data_with_target_extended = map_past_timestamp_to_target(data_with_target, n_pst_dys, n_nxt_dys)
     col_drop_list = []
-    for col_drop in range(num_feat * n_pst_dys + n_nxt_dys, num_feat * (n_pst_dys + n_nxt_dys), 1):
+    for col_drop in range(num_feat * n_pst_dys + 1, num_feat * (n_pst_dys + n_nxt_dys), 1):
         if col_drop % num_feat != 0:
             col_drop_list.append(col_drop)
+    #
+    # for col_drop in range(num_feat * n_pst_dys + n_nxt_dys, num_feat * (n_pst_dys + n_nxt_dys), 1):
+    #     if col_drop % num_feat != 0:
+    #         col_drop_list.append(col_drop)
 
     data_with_target_extended.drop(data_with_target_extended.columns[col_drop_list],
                                    axis=1,
@@ -464,10 +474,19 @@ def train_data(data_train, test_ratio=.3, y_t=.4, num_feat=6, n_pst_dys=1, n_nxt
     # as uni-variate is not 2d data transform required for lstm
     if n_nxt_dys == 1:
         y = y.reshape((-1, 1))
+    # print(x_prep.shape)
+    # print(y.shape)
+    # return
+    # input_size = (n_pst_dys, num_feat)
     input_size = (n_pst_dys, num_feat)
+    # output_size = n_nxt_dys
     output_size = n_nxt_dys
     model = design_model(input_size, output_size)
     history, model = build_model(model, x_prep, y)
+
+    # explanatory_today = df_explanatory.reshape((n_sample, look_back, num_feat))
+    # forecast_tomorrow = model.predict(explanatory_today, verbose=0)
+
 
     return history.history
 
@@ -506,19 +525,25 @@ def back_test(data_test, money=10000, ticker='SOL-USD', start_dtt='2020-01-01', 
 def main():
     start_date = '2020-01-01'
     # extracted_data = extract_data(start_dtt=start_date)
-    # loaded_data = load_data(start_dtt=start_date)
-    # print(loaded_data)
-    n_past_days = 2
-    # data_extended = process_data(extracted_data, n_pst_dys=n_past_days)
-    # data_extended = process_data(loaded_data, n_pst_dys=n_past_days)
+    # print(extracted_data)
+    loaded_data = load_data(start_dtt=start_date)
+    # print(loaded_data.head(6))
+
+    n_past_days = global_past_dys
+    n_nxt_days = global_next_dys
+    # data_extended = process_data(extracted_data, n_pst_dys=n_past_days, n_nxt_dys=n_nxt_days)
+    # print(data_extended)
+    data_extended = process_data(loaded_data, n_pst_dys=n_past_days, n_nxt_dys=n_nxt_days)
+    # print(data_extended.iloc[1, :])
+    # print(data_extended.head(6))
     loaded_data_extended = load_data_extended(start_dtt=start_date)
-    # print(loaded_data_extended)
+    # print(loaded_data_extended.iloc[1, :])
     # train_history = train_data(data_extended, n_pst_dys=n_past_days)
-    train_history = train_data(loaded_data_extended.head(50), n_pst_dys=n_past_days)
-    # invest_money = 10000
+    train_history = train_data(loaded_data_extended.head(50), n_pst_dys=n_past_days, n_nxt_dys=n_nxt_days)
+    invest_money = 10000
     # test_history = back_test(data_extended, money=invest_money)
-    # test_history = back_test(loaded_data_extended.head(10),
-    #                          money=invest_money)
+    test_history = back_test(loaded_data_extended.head(10),
+                             money=invest_money)
     # print(test_history)
     # idx = 30
     # x_data = get_x0_y0(idx)
