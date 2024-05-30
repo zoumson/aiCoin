@@ -515,8 +515,314 @@ def get_bito_bal(_email, _api_secret, _api_key):
     return bal_data_trade
 
 
+def set_bito_single_buy(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    # pair = "btc_usdt"
+    pair_name = "sol_twd"
+    pair_action = "buy"
+    # {"error":"Invalid amount 0.0001 less than min 0.01."}
+    pair_amount = '0.05'
+    pair_price = '200'
+    # Limit buy order
+    r = bitopro_client.create_an_order(pair=pair_name,
+                                       action=pair_action,
+                                       amount=pair_amount,
+                                       price=pair_price,
+                                       type=OrderType.Limit)
+
+    # print(r)
+    ret_id = 0
+    if 'orderId' in r:
+        ret_id = float(r['orderId'])
+
+    print(ret_id)
+    return ret_id
+
+
+def set_bito_single_sell(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    # pair = "btc_usdt"
+    pair_name = "matic_twd"
+    pair_action = "sell"
+    # {"error":"Invalid amount 0.02 less than min 1."}
+    pair_amount = '1'
+    pair_price = '100'
+    # Limit buy order
+    r = bitopro_client.create_an_order(pair=pair_name,
+                                       action=pair_action,
+                                       amount=pair_amount,
+                                       price=pair_price,
+                                       type=OrderType.Limit)
+    print(r)
+    ret_id = 0
+    if 'orderId' in r:
+        ret_id = float(r['orderId'])
+
+    print(ret_id)
+    return ret_id
+
+
+def set_bito_multiple_buy_sell(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+
+    pair_name_buy = "sol_twd"
+    pair_name_sell = "matic_twd"
+    pair_action_buy = "BUY"
+    pair_action_sell = "SELL"
+    pair_amount_buy = 0.02
+    pair_amount_sell = 1
+    pair_price_buy = 200
+    pair_price_sell = 100
+    client_buy = 200
+    client_sell = 100
+    # Limit buy order
+    orders_1 = {'pair': f'{pair_name_buy}',
+                'action': f'{pair_action_buy}',
+                'amount': str(pair_amount_buy),
+                'price': str(pair_price_buy),
+                'timestamp': get_current_timestamp(),
+                # 'timestamp': 1717336672000,
+                'clientId': client_buy,
+                'type': 'LIMIT'}
+    # Limit sell order
+    orders_2 = {'pair': f'{pair_name_sell}',
+                'action': f'{pair_action_sell}',
+                'amount': str(pair_amount_sell),
+                'price': str(pair_price_sell),
+                'timestamp': get_current_timestamp(),
+                # 'timestamp': get_current_timestamp() + 60 * 1000,
+                # 'timestamp': 1717336752000,
+                'clientId': client_sell,
+                'type': 'LIMIT'}
+
+    batch_orders: list = [orders_1, orders_2]
+    r = bitopro_client.create_batch_order(batch_orders)
+    data_res = r['data']
+    all_ret = []
+    print(r)
+    for rr in data_res:
+        ret_id = 0
+        if 'orderId' in rr:
+            ret_id = float(rr['orderId'])
+        all_ret.append(ret_id)
+
+    print(all_ret)
+    return all_ret
+
+
+def get_bito_all_orders(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    pair_name = "sol_twd"
+    r = bitopro_client.get_all_orders(pair=pair_name, status_kind=StatusKind.OPEN, ignoreTimeLimitEnable=True)
+    # r = bitopro_client.get_all_orders(status_kind=StatusKind.OPEN, ignoreTimeLimitEnable=True)
+    # print(r)
+    data_res = r['data']
+    all_ret = []
+    # print(r)
+    for rr in data_res:
+        ret_id = 0
+        if 'id' in rr:
+            ret_id = float(rr['id'])
+        all_ret.append(ret_id)
+
+    print(all_ret)
+    return all_ret
+
+
+def cancel_bito_all_orders(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    r = bitopro_client.cancel_all_orders('all')
+    print(r)
+
+
+# not tested
+def get_orders_by_ID(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    order_id: str = '200'
+    pair_name: str = "sol_twd"
+    r = bitopro_client.get_an_order(pair=pair_name, order_id=order_id)
+    print(r)
+
+# not tested
+def cancel_single_orders(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    pair_name: str = "sol_twd"
+    r = bitopro_client.cancel_all_orders(pair_name)
+    print(r)
+
+# not tested
+def cancel_multiple_orders(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    order_id1: str = '200'
+    order_id2: str = '100000'
+    pair_name: str = "sol_twd"
+
+    order_id_lst: list = [order_id1, order_id2]
+    batch_orders_dict: dict = {pair_name: order_id_lst}
+    r = bitopro_client.cancel_multiple_orders(batch_orders_dict)
+    print(r)
+
+# not tested
+def cancel_orders_by_ID(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    pair_name: str = "sol_twd"
+    order_id: str = '200'
+    r = bitopro_client.cancel_an_order(pair=pair_name, order_id=order_id)
+    print(r)
+
+
+#rewrite strategies
+def set_simple_strategy(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    # pair_name: str = "sol_twd"
+    pair_name: str = "matic_twd"
+    pair_name_base: str = "sol"
+    pair_name_quote: str = "twd"
+
+    def get_trading_limit(pair):
+        base_precision, quote_precision, minLimit_base_amount = None, None, None
+        r = bitopro_client.get_trading_pairs()  # get pairs status
+        for i in r['data']:
+            if i['pair'] == pair.lower():
+                base_precision = i['basePrecision']  # Decimal places for Base Currency
+                quote_precision = i['quotePrecision']  # Decimal places for Quoted Currency
+                minLimit_base_amount = i['minLimitBaseAmount']  # Minimum order amount
+                break
+        return base_precision, quote_precision, minLimit_base_amount
+
+    def strategy(base, quote):
+
+        pair = f"{base.lower()}_{quote.lower()}"
+        # Get trading pair limitations
+        base_precision, quote_precision, min_limit_base_amount = get_trading_limit(pair)
+        # Query balance
+        r = bitopro_client.get_account_balance()
+        bal_base, bal_quote = None, None
+        for curr in r['data']:
+            if curr['currency'] == base.lower():
+                bal_base = eval(curr['amount'])
+            if curr['currency'] == quote.lower():
+                bal_quote = eval(curr['amount'])
+            if bal_base is not None and bal_quote is not None:
+                break
+        print(f"Balance: {base}: {bal_base}, {quote}: {bal_quote}")
+        orderbook = bitopro_client.get_order_book(pair=pair, limit=1, scale=0)
+        # Highest buying price
+        bid = float(orderbook['bids'][0]['price']) if len(orderbook['bids']) > 0 else None
+        # Lowest selling price
+        ask = float(orderbook['asks'][0]['price']) if len(orderbook['asks']) > 0 else None
+        # Mid-price
+        mid = 0.5 * (bid + ask) if (bid and ask) else None
+        # Place an order, limit buy order (at mid-price)
+        amount = round(0.0001, base_precision)
+        price = round(mid, quote_precision)
+        if float(amount) >= float(min_limit_base_amount):
+            r = bitopro_client.create_an_order(pair=pair, action='buy', amount=str(amount),
+                                               price=str(price), type=OrderType.Limit)
+            print(r)
+            # Or place a market order (take order)
+            # price = round(ask, quote_precision)
+            # r = bitopro_client.create_an_order(pair=pair, action='buy', amount=str(amount),
+            # price=str(price),type=OrderType.Limit)
+            # print(r)
+            order_id: str = r['orderId']
+            time.sleep(2)
+            # Query order
+            while True:
+                r = bitopro_client.get_an_order(pair=pair, order_id=order_id)
+                print(r)
+                if r['status'] == 2:
+                    break
+                else:
+                    time.sleep(10)
+            print('Order completed!')
+            price_sell = round(float(r['avgExecutionPrice']) * (1 + 0.01), quote_precision)
+            # Place a limit sell order (for profit margin)
+            r = bitopro_client.create_an_order(pair=pair, action='sell', amount=str(amount),
+                                               price=str(price_sell), type=OrderType.Limit)
+            print(r)
+
+    r = get_trading_limit(pair_name)
+    print(r)
+    # strategy(pair_name_base, pair_name_quote)
+
+#rewrite strategies
+# add a file to save trading flag record, then load it daily to check previous day stat
+# this will allow not buying if already bougtht, next action should be sell first
+# being able to sell when going going doing at certain margin, 15%
+# sell also when profitable at certain margin
+# buy if knowing coming days price will rise, if rise will be up to 15%, otherwise stay idle
+# sell if knowing coming days price will fall
+# need to access current buying price to be able to trigger alarm
+# sell right now if dramatic price fall, only if price down compared to buying price, emergenty alert to sell
+# sell if current price is making significant profit, 15%, comparing to buying price
+def set_sma_strategy(_email, _api_secret, _api_key):
+    # Create and initialize an instance of BitoproRestfulClient
+    bitopro_client = BitoproRestfulClient(_api_key, _api_secret)
+    # pair_name: str = "sol_twd"
+    pair_name: str = "sol_twd"
+    pair_name_base: str = "sol"
+    pair_name_quote: str = "twd"
+
+    def strategy(base, quote):
+        pair = f"{base.lower()}_{quote.lower()}"
+        signal_entry_long: bool = False
+        signal_exit_long: bool = False
+        resolution = CandlestickResolution._1d
+        dt_string = '2023/01/01 00:00:00'
+        start_ts = int(datetime.strptime(dt_string, "%Y/%m/%d %H:%M:%S").replace(
+            tzinfo=datetime.timezone.utc).timestamp())
+        end_ts = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+
+        sma_df = indicator("sma", pair, resolution, start_ts, end_ts, length=7)
+        sma21_df = indicator("sma", pair, resolution, start_ts, end_ts, length=21)
+
+        sma_df["SMA_21"] = sma21_df["SMA_21"]
+
+        sma_7_last = sma_df['SMA_7'].iloc[-1]
+        sma_7_penultimate = sma_df['SMA_7'].iloc[-2]
+
+        sma_21_last = sma_df['SMA_21'].iloc[-1]
+        sma_21_penultimate = sma_df['SMA_21'].iloc[-2]
+
+        if (
+                float(sma_7_penultimate) < float(sma_21_penultimate) and
+                float(sma_7_last) > float(sma_21_last)
+        ):
+            signal_entry_long = True  # Entry signal
+        elif (
+                float(sma_7_penultimate) > float(sma_21_penultimate) and
+                float(sma_7_last) < float(sma_21_last)
+        ):
+            signal_exit_long = True  # Exit signal
+        if signal_entry_long:
+            # Please check the balance and place a buy order
+            signal_entry_long = False
+        if signal_exit_long:
+            # Please check the balance and place a sell order, if unable to do so, don't proceed.
+            signal_exit_long = False
+    # strategy(pair_name_base, pair_name_quote)
+
+
+
 def main2():
-    ui.load_data(get_bito_bal)
+    # ui.load_data(get_bito_bal)
+    # ui.load_data(set_bito_single_buy)
+    # ui.load_data(set_bito_single_sell)
+    # ui.load_data(set_bito_multiple_buy_sell)
+    # ui.load_data(get_bito_all_orders)
+    ui.load_data(cancel_bito_all_orders)
+    # print(get_current_timestamp())
 
 
 def main1():
